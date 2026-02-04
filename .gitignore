@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Local runs / outputs
+compare_summary.log
+mismatch_logs/
+*.log
+
+# OS / editor
+.DS_Store

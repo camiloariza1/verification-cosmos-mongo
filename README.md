@@ -1,0 +1,100 @@
+# Cosmos DB ↔ MongoDB Consistency Checker
+
+Python utility to validate data consistency between:
+- **Source:** Azure Cosmos DB (**Mongo API** or **SQL/Core API**)
+- **Target:** MongoDB
+
+It samples documents from the source, matches by a per-collection business key, compares documents (including nested objects/arrays), and emits:
+- A main summary log (also printed to console)
+- Per-collection mismatch logs (`.jsonl`)
+
+## Install
+
+Requirements:
+- Python **3.9+**
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Minimal runtime deps
+pip install -r requirements.txt
+```
+
+Recommended (installs the `cosmos-mongo-compare` CLI entrypoint):
+```bash
+pip install -e .
+```
+
+If using Cosmos **SQL/Core API** (optional extra):
+```bash
+pip install -e ".[cosmos-sql]"
+```
+
+## Configure
+
+Start from `config.example.yaml` and set connection details and per-collection settings (copy it to e.g. `config.yaml`):
+- `collections.<name>.business_key`: unique identifier used to find the same document in both systems
+- `collections.<name>.enabled` (optional): set `false` to skip a collection while iterating on config (if `true`, `business_key` is required)
+- `collections.<name>.exclude_fields`: fields to ignore (supports simple names and dotted paths)
+- `collection_defaults` (optional): default per-collection settings used when a collection is missing from `collections` (useful with `--all-collections`)
+- `sampling.percentage` or `sampling.count`
+- `sampling.seed` (optional): makes sampling deterministic
+
+Notes on choosing `business_key`:
+- It must exist in both Cosmos and MongoDB for the collection, and be unique/stable.
+- Cosmos **SQL/Core API** uses `id` as the built-in document identifier (there is no `_id`).
+- Cosmos **Mongo API** exposes the identifier as MongoDB `_id` (even if the Azure portal shows it differently).
+- If your MongoDB target uses an `ObjectId` `_id` but Cosmos uses string IDs, prefer a separate field like `id`/`memberId` and set `business_key` to that field.
+
+## Run
+
+All collections listed in config:
+```bash
+cosmos-mongo-compare --config config.yaml
+```
+
+Example with a config under `configs/`:
+```bash
+cosmos-mongo-compare --config configs/nlp-member.yaml
+```
+
+Single collection:
+```bash
+cosmos-mongo-compare --config config.yaml --collection customers
+```
+
+List all Cosmos collections and compare those that have explicit config entries (if `collection_defaults` is set, it will be used for the rest):
+```bash
+cosmos-mongo-compare --config config.yaml --all-collections
+```
+
+If you didn't install the package, you can run the script directly:
+```bash
+python3 cosmos_mongo_compare.py --config config.yaml
+```
+
+## Output
+
+- Main summary log: `logging.main_log`
+- Per-collection mismatch logs: `logging.output_dir/<collection>_mismatches.jsonl`
+
+Each mismatch record includes the source doc, target doc, and a structured list of differences with JSON paths.
+
+## Tests
+
+```bash
+python3 -m unittest discover -s tests -p "test_*.py"
+```
+
+## Architecture (high level)
+
+- `cosmos_mongo_compare/clients/*`: Cosmos (Mongo/SQL) + MongoDB access
+- `cosmos_mongo_compare/sampling.py`: sampling policy (server-side when possible; deterministic seeded selection otherwise)
+- `cosmos_mongo_compare/compare.py`: recursive diff (missing fields, type mismatches, nested dicts, arrays)
+- `cosmos_mongo_compare/reporting.py`: summary metrics + per-collection mismatch logs
+
+## Notes / Design Decisions
+
+- **Deterministic sampling:** when `sampling.seed` is set (or when Cosmos SQL forces it), the tool selects the `K` documents with the smallest `sha256(seed:key)` scores. This is deterministic and order-independent, but requires scanning business keys in the source collection.
+- **Exclusions:** `exclude_fields` supports simple names (excluded at any depth) and dotted paths (excluded only at that path).

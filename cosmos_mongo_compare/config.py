@@ -1,0 +1,231 @@
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Mapping
+from typing import Optional
+
+import yaml
+
+
+@dataclass(frozen=True)
+class CosmosConfig:
+    api: str  # "mongo" | "sql"
+    database: str
+    uri: Optional[str] = None  # mongo api
+    endpoint: Optional[str] = None  # sql api
+    key: Optional[str] = None  # sql api
+
+
+@dataclass(frozen=True)
+class MongoConfig:
+    uri: str
+    database: str
+
+
+@dataclass(frozen=True)
+class SamplingConfig:
+    percentage: Optional[float] = None
+    count: Optional[int] = None
+    seed: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class LoggingConfig:
+    main_log: str
+    output_dir: str
+
+
+@dataclass(frozen=True)
+class CollectionConfig:
+    business_key: Optional[str] = None
+    enabled: bool = True
+    exclude_fields: tuple[str, ...] = ()
+    array_order_insensitive_paths: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class AppConfig:
+    cosmos: CosmosConfig
+    mongodb: MongoConfig
+    sampling: SamplingConfig
+    logging: LoggingConfig
+    collections: Mapping[str, CollectionConfig]
+    collection_defaults: CollectionConfig
+
+
+class ConfigError(ValueError):
+    pass
+
+
+def _require(mapping: Mapping[str, Any], key: str, where: str) -> Any:
+    if key not in mapping:
+        raise ConfigError(f"Missing required config key: {where}.{key}")
+    return mapping[key]
+
+
+def _as_str(value: Any, where: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ConfigError(f"Expected non-empty string at {where}")
+    return value
+
+
+def _as_int(value: Any, where: str) -> int:
+    if not isinstance(value, int):
+        raise ConfigError(f"Expected integer at {where}")
+    return value
+
+
+def _as_float(value: Any, where: str) -> float:
+    if not isinstance(value, (int, float)):
+        raise ConfigError(f"Expected number at {where}")
+    return float(value)
+
+
+def _as_str_list(value: Any, where: str) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+        raise ConfigError(f"Expected list[str] at {where}")
+    return tuple(value)
+
+
+def load_config(path: str) -> AppConfig:
+    raw = _load_raw_config(path)
+    if not isinstance(raw, dict):
+        raise ConfigError("Config root must be an object/map.")
+
+    cosmos_raw = _require(raw, "cosmos", "root")
+    mongo_raw = _require(raw, "mongodb", "root")
+    collections_raw = raw.get("collections", None)
+    if collections_raw is None:
+        collections_raw = {}
+    defaults_raw = raw.get("collection_defaults", None)
+    if defaults_raw is None:
+        defaults_raw = {}
+    sampling_raw = raw.get("sampling", None)
+    if sampling_raw is None:
+        sampling_raw = {}
+    logging_raw = _require(raw, "logging", "root")
+
+    cosmos_api = _as_str(_require(cosmos_raw, "api", "cosmos"), "cosmos.api").lower()
+    cosmos_database = _as_str(_require(cosmos_raw, "database", "cosmos"), "cosmos.database")
+    if cosmos_api not in {"mongo", "sql"}:
+        raise ConfigError("cosmos.api must be 'mongo' or 'sql'")
+
+    cosmos_uri = cosmos_raw.get("uri")
+    cosmos_endpoint = cosmos_raw.get("endpoint")
+    cosmos_key = cosmos_raw.get("key")
+    if cosmos_api == "mongo":
+        cosmos_uri = _as_str(_require(cosmos_raw, "uri", "cosmos"), "cosmos.uri")
+        cosmos_endpoint = None
+        cosmos_key = None
+    else:
+        cosmos_endpoint = _as_str(_require(cosmos_raw, "endpoint", "cosmos"), "cosmos.endpoint")
+        cosmos_key = _as_str(_require(cosmos_raw, "key", "cosmos"), "cosmos.key")
+        cosmos_uri = None
+
+    if not isinstance(sampling_raw, dict):
+        raise ConfigError("sampling must be an object/map.")
+
+    sampling_percentage = sampling_raw.get("percentage")
+    sampling_count = sampling_raw.get("count")
+    if sampling_percentage is not None and sampling_count is not None:
+        raise ConfigError("sampling.percentage and sampling.count are mutually exclusive.")
+    if sampling_percentage is None and sampling_count is None:
+        raise ConfigError("Provide either sampling.percentage or sampling.count.")
+    percentage = _as_float(sampling_percentage, "sampling.percentage") if sampling_percentage is not None else None
+    if percentage is not None and (percentage <= 0 or percentage > 100):
+        raise ConfigError("sampling.percentage must be >0 and <=100.")
+    count = _as_int(sampling_count, "sampling.count") if sampling_count is not None else None
+    if count is not None and count <= 0:
+        raise ConfigError("sampling.count must be >0.")
+
+    seed = sampling_raw.get("seed")
+    if seed is not None:
+        seed = _as_int(seed, "sampling.seed")
+
+    main_log = _as_str(_require(logging_raw, "main_log", "logging"), "logging.main_log")
+    output_dir = _as_str(_require(logging_raw, "output_dir", "logging"), "logging.output_dir")
+
+    if not isinstance(defaults_raw, dict):
+        raise ConfigError("collection_defaults must be an object/map.")
+    defaults_enabled = defaults_raw.get("enabled", True)
+    if not isinstance(defaults_enabled, bool):
+        raise ConfigError("Expected boolean at collection_defaults.enabled")
+    defaults_business_key_raw = defaults_raw.get("business_key", None)
+    defaults_business_key = (
+        _as_str(defaults_business_key_raw, "collection_defaults.business_key") if defaults_business_key_raw is not None else None
+    )
+    defaults_exclude_fields = _as_str_list(defaults_raw.get("exclude_fields"), "collection_defaults.exclude_fields")
+    defaults_array_paths = _as_str_list(
+        defaults_raw.get("array_order_insensitive_paths"),
+        "collection_defaults.array_order_insensitive_paths",
+    )
+    collection_defaults = CollectionConfig(
+        business_key=defaults_business_key,
+        enabled=defaults_enabled,
+        exclude_fields=defaults_exclude_fields,
+        array_order_insensitive_paths=defaults_array_paths,
+    )
+
+    collections: dict[str, CollectionConfig] = {}
+    if not isinstance(collections_raw, dict):
+        raise ConfigError("collections must be a mapping of collection_name -> settings.")
+    for name, c_raw in collections_raw.items():
+        if not isinstance(name, str) or not name:
+            raise ConfigError("Collection names must be non-empty strings.")
+        if not isinstance(c_raw, dict):
+            raise ConfigError(f"collections.{name} must be a mapping/object.")
+        enabled = c_raw.get("enabled", True)
+        if not isinstance(enabled, bool):
+            raise ConfigError(f"Expected boolean at collections.{name}.enabled")
+
+        if enabled:
+            business_key = _as_str(
+                _require(c_raw, "business_key", f"collections.{name}"),
+                f"collections.{name}.business_key",
+            )
+        else:
+            business_key_raw = c_raw.get("business_key", None)
+            business_key = _as_str(business_key_raw, f"collections.{name}.business_key") if business_key_raw is not None else None
+        exclude_fields = _as_str_list(c_raw.get("exclude_fields"), f"collections.{name}.exclude_fields")
+        array_paths = _as_str_list(
+            c_raw.get("array_order_insensitive_paths"),
+            f"collections.{name}.array_order_insensitive_paths",
+        )
+        collections[name] = CollectionConfig(
+            business_key=business_key,
+            enabled=enabled,
+            exclude_fields=exclude_fields,
+            array_order_insensitive_paths=array_paths,
+        )
+
+    return AppConfig(
+        cosmos=CosmosConfig(
+            api=cosmos_api,
+            database=cosmos_database,
+            uri=cosmos_uri,
+            endpoint=cosmos_endpoint,
+            key=cosmos_key,
+        ),
+        mongodb=MongoConfig(
+            uri=_as_str(_require(mongo_raw, "uri", "mongodb"), "mongodb.uri"),
+            database=_as_str(_require(mongo_raw, "database", "mongodb"), "mongodb.database"),
+        ),
+        sampling=SamplingConfig(percentage=percentage, count=count, seed=seed),
+        logging=LoggingConfig(main_log=main_log, output_dir=output_dir),
+        collections=collections,
+        collection_defaults=collection_defaults,
+    )
+
+
+def _load_raw_config(path: str) -> Any:
+    p = Path(path)
+    if not p.exists():
+        raise ConfigError(f"Config file not found: {path}")
+    data = p.read_text(encoding="utf-8")
+    if p.suffix.lower() == ".json":
+        return json.loads(data)
+    return yaml.safe_load(data)

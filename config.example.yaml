@@ -1,0 +1,54 @@
+cosmos:
+  api: mongo  # mongo | sql (SQL/Core API uses "id", not "_id")
+  database: source_db
+  # For Cosmos Mongo API:
+  uri: "mongodb://cosmosuser:pass@host:10255/?ssl=true&retrywrites=false"
+  # For Cosmos SQL/Core API:
+  # endpoint: "https://account.documents.azure.com:443/"
+  # key: "COSMOS_KEY"
+
+mongodb:
+  uri: "mongodb://localhost:27017"
+  database: target_db
+
+collections:
+  customers:
+    enabled: true
+    business_key: customerId
+    exclude_fields:
+      - _id
+      - _etag
+      - _ts
+      - lastUpdated
+    # Optional: treat arrays at these paths as order-insensitive
+    # array_order_insensitive_paths:
+    #   - "addresses"
+  orders:
+    enabled: true
+    business_key: orderId
+    exclude_fields:
+      - _id
+      - _etag
+      - _ts
+
+# Optional defaults used when comparing collections that don't have an explicit entry in `collections`.
+# Helpful with `--all-collections` if you want to compare everything using the same key.
+collection_defaults:
+  enabled: true
+  # Cosmos SQL/Core API: usually "id"
+  # Cosmos Mongo API: usually "_id"
+  business_key: id
+  exclude_fields:
+    - _etag
+    - _ts
+
+sampling:
+  # Provide exactly one of:
+  percentage: 5
+  # count: 500
+  # Optional: if provided, sampling becomes deterministic (same docs every run for the same dataset)
+  seed: 42
+
+logging:
+  main_log: "compare_summary.log"
+  output_dir: "mismatch_logs"

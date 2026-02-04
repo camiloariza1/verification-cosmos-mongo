@@ -1,0 +1,27 @@
+cosmos:
+  api: mongo  # mongo | sql
+  database: nlp-member
+  uri: "mongodb://cosmosuser:pass@host:10255/?ssl=true&retrywrites=false"
+
+mongodb:
+  uri: "mongodb://localhost:27017"
+  database: nlp-member
+
+collections: {}
+
+collection_defaults:
+  enabled: true
+  # Set to the field that uniquely identifies the same document in BOTH systems.
+  # If both sides share the same Mongo `_id`, this can work well:
+  business_key: _id
+  exclude_fields:
+    - _etag
+    - _ts
+
+sampling:
+  percentage: 5
+  seed: 42
+
+logging:
+  main_log: "compare_summary.log"
+  output_dir: "mismatch_logs"
