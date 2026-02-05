@@ -32,7 +32,11 @@ class CosmosSqlSourceClient(SourceClient):
 
     def __init__(self, endpoint: str, key: str, database: str, *, logger: logging.Logger):
         if CosmosClient is None:  # pragma: no cover
-            raise RuntimeError("azure-cosmos is required for Cosmos SQL API. Install with: pip install 'azure-cosmos>=4.5'")
+            raise RuntimeError(
+                "azure-cosmos is required for Cosmos SQL/Core API. "
+                "Install with: python -m pip install 'azure-cosmos>=4.8.0' "
+                "(Python 3.13 support starts at azure-cosmos 4.8.0)."
+            )
         self._logger = logger
         self._client = CosmosClient(endpoint, credential=key)
         self._database = self._client.get_database_client(database)

@@ -1,15 +1,15 @@
 cosmos:
   api: mongo  # mongo | sql (SQL/Core API uses "id", not "_id")
-  database: source_db
+  database: source_db  # or set COSMOS_DATABASE
   # For Cosmos Mongo API:
-  uri: "mongodb://cosmosuser:pass@host:10255/?ssl=true&retrywrites=false"
+  uri: "${COSMOS_URI}"  # or hardcode; env overrides config
   # For Cosmos SQL/Core API:
-  # endpoint: "https://account.documents.azure.com:443/"
-  # key: "COSMOS_KEY"
+  # endpoint: "${COSMOS_ENDPOINT}"  # or hardcode; env overrides config
+  # key: "${COSMOS_KEY}"            # or hardcode; env overrides config
 
 mongodb:
-  uri: "mongodb://localhost:27017"
-  database: target_db
+  uri: "${MONGODB_URI}"  # or hardcode; env overrides config
+  database: target_db     # or set MONGODB_DATABASE
 
 collections:
   customers:

@@ -11,24 +11,36 @@ It samples documents from the source, matches by a per-collection business key, 
 ## Install
 
 Requirements:
-- Python **3.9+**
+- Python **3.9+** (works with **Python 3.13**)
+
+If your Python 3.13 executable is named `python3.13`, replace `python` with `python3.13` in the commands below.
 
 ```bash
-python3 -m venv .venv
+python -m venv .venv
 source .venv/bin/activate
 
+# Recommended (helps on newer Python versions like 3.13)
+python -m pip install -U pip
+
 # Minimal runtime deps
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 Recommended (installs the `cosmos-mongo-compare` CLI entrypoint):
 ```bash
-pip install -e .
+python -m pip install -e .
 ```
 
 If using Cosmos **SQL/Core API** (optional extra):
 ```bash
-pip install -e ".[cosmos-sql]"
+python -m pip install -e ".[cosmos-sql]"
+```
+
+Note: Cosmos **SQL/Core API** requires `azure-cosmos>=4.8.0` (Python 3.13 support starts at `azure-cosmos` 4.8.0).
+
+If you are running the script directly (not `pip install -e .`), install SQL/Core deps with:
+```bash
+python -m pip install -r requirements-cosmos-sql.txt
 ```
 
 ## Configure
@@ -46,6 +58,18 @@ Notes on choosing `business_key`:
 - Cosmos **SQL/Core API** uses `id` as the built-in document identifier (there is no `_id`).
 - Cosmos **Mongo API** exposes the identifier as MongoDB `_id` (even if the Azure portal shows it differently).
 - If your MongoDB target uses an `ObjectId` `_id` but Cosmos uses string IDs, prefer a separate field like `id`/`memberId` and set `business_key` to that field.
+
+### Environment variables (recommended for secrets)
+
+The loader supports both:
+- `${VARNAME}` expansion inside `config.yaml` values (e.g. `uri: "${MONGODB_URI}"`)
+- Direct env overrides (if set, these take precedence over values in the config file)
+
+Supported variables:
+- `COSMOS_URI` (Cosmos **Mongo API** connection string)
+- `COSMOS_ENDPOINT`, `COSMOS_KEY` (Cosmos **SQL/Core API**)
+- `MONGODB_URI` (MongoDB connection string)
+- `COSMOS_API`, `COSMOS_DATABASE`, `MONGODB_DATABASE` (optional convenience overrides)
 
 ## Run
 
@@ -71,7 +95,7 @@ cosmos-mongo-compare --config config.yaml --all-collections
 
 If you didn't install the package, you can run the script directly:
 ```bash
-python3 cosmos_mongo_compare.py --config config.yaml
+python cosmos_mongo_compare.py --config config.yaml
 ```
 
 ## Output
@@ -84,12 +108,12 @@ Each mismatch record includes the source doc, target doc, and a structured list 
 ## Tests
 
 ```bash
-python3 -m unittest discover -s tests -p "test_*.py"
+python -m unittest discover -s tests -p "test_*.py"
 ```
 
 Or, if you installed dev deps (`pip install -e ".[dev]"`):
 ```bash
-python3 -m pytest
+python -m pytest
 ```
 
 ## Architecture (high level)

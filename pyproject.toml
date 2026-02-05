@@ -5,12 +5,12 @@ description = "Compare sampled documents between Azure Cosmos DB (Mongo API or S
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-  "pymongo>=4.5",
+  "pymongo>=4.11",
   "PyYAML>=6.0",
 ]
 
 [project.optional-dependencies]
-cosmos-sql = ["azure-cosmos>=4.5"]
+cosmos-sql = ["azure-cosmos>=4.8.0"]
 dev = ["pytest>=7.0"]
 
 [project.scripts]
@@ -18,4 +18,3 @@ cosmos-mongo-compare = "cosmos_mongo_compare.__main__:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-

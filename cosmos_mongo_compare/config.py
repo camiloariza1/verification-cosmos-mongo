@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -60,6 +61,36 @@ class ConfigError(ValueError):
 
 
 _FIELD_PATH_SEGMENT_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_-]*$")
+_ENV_VAR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def _env_nonempty(name: str) -> Optional[str]:
+    value = os.environ.get(name)
+    if value is None:
+        return None
+    value = value.strip()
+    return value or None
+
+
+def _expand_env(value: str, where: str) -> str:
+    def repl(match: re.Match[str]) -> str:
+        var = match.group(1)
+        env_val = _env_nonempty(var)
+        if env_val is None:
+            raise ConfigError(f"Missing environment variable {var} referenced at {where}")
+        return env_val
+
+    return _ENV_VAR_RE.sub(repl, value)
+
+
+def _expand_env_in_obj(obj: Any, where: str) -> Any:
+    if isinstance(obj, str):
+        return _expand_env(obj, where) if "${" in obj else obj
+    if isinstance(obj, list):
+        return [_expand_env_in_obj(v, f"{where}[{i}]") for i, v in enumerate(obj)]
+    if isinstance(obj, dict):
+        return {k: _expand_env_in_obj(v, f"{where}.{k}") for k, v in obj.items()}
+    return obj
 
 
 def _require(mapping: Mapping[str, Any], key: str, where: str) -> Any:
@@ -111,7 +142,7 @@ def _as_field_path(value: Any, where: str) -> str:
 
 
 def load_config(path: str) -> AppConfig:
-    raw = _load_raw_config(path)
+    raw = _expand_env_in_obj(_load_raw_config(path), "root")
     if not isinstance(raw, dict):
         raise ConfigError("Config root must be an object/map.")
 
@@ -128,8 +159,11 @@ def load_config(path: str) -> AppConfig:
         sampling_raw = {}
     logging_raw = _as_mapping(_require(raw, "logging", "root"), "logging")
 
-    cosmos_api = _as_str(_require(cosmos_raw, "api", "cosmos"), "cosmos.api").lower()
-    cosmos_database = _as_str(_require(cosmos_raw, "database", "cosmos"), "cosmos.database")
+    cosmos_api = _as_str(_env_nonempty("COSMOS_API") or _require(cosmos_raw, "api", "cosmos"), "cosmos.api").lower()
+    cosmos_database = _as_str(
+        _env_nonempty("COSMOS_DATABASE") or _require(cosmos_raw, "database", "cosmos"),
+        "cosmos.database",
+    )
     if cosmos_api not in {"mongo", "sql"}:
         raise ConfigError("cosmos.api must be 'mongo' or 'sql'")
 
@@ -137,12 +171,21 @@ def load_config(path: str) -> AppConfig:
     cosmos_endpoint = cosmos_raw.get("endpoint")
     cosmos_key = cosmos_raw.get("key")
     if cosmos_api == "mongo":
-        cosmos_uri = _as_str(_require(cosmos_raw, "uri", "cosmos"), "cosmos.uri")
+        cosmos_uri = _as_str(
+            _env_nonempty("COSMOS_URI") or _require(cosmos_raw, "uri", "cosmos"),
+            "cosmos.uri",
+        )
         cosmos_endpoint = None
         cosmos_key = None
     else:
-        cosmos_endpoint = _as_str(_require(cosmos_raw, "endpoint", "cosmos"), "cosmos.endpoint")
-        cosmos_key = _as_str(_require(cosmos_raw, "key", "cosmos"), "cosmos.key")
+        cosmos_endpoint = _as_str(
+            _env_nonempty("COSMOS_ENDPOINT") or _require(cosmos_raw, "endpoint", "cosmos"),
+            "cosmos.endpoint",
+        )
+        cosmos_key = _as_str(
+            _env_nonempty("COSMOS_KEY") or _require(cosmos_raw, "key", "cosmos"),
+            "cosmos.key",
+        )
         cosmos_uri = None
 
     sampling_raw = _as_mapping(sampling_raw, "sampling")
@@ -231,8 +274,11 @@ def load_config(path: str) -> AppConfig:
             key=cosmos_key,
         ),
         mongodb=MongoConfig(
-            uri=_as_str(_require(mongo_raw, "uri", "mongodb"), "mongodb.uri"),
-            database=_as_str(_require(mongo_raw, "database", "mongodb"), "mongodb.database"),
+            uri=_as_str(_env_nonempty("MONGODB_URI") or _require(mongo_raw, "uri", "mongodb"), "mongodb.uri"),
+            database=_as_str(
+                _env_nonempty("MONGODB_DATABASE") or _require(mongo_raw, "database", "mongodb"),
+                "mongodb.database",
+            ),
         ),
         sampling=SamplingConfig(percentage=percentage, count=count, seed=seed),
         logging=LoggingConfig(main_log=main_log, output_dir=output_dir),
