@@ -2,12 +2,21 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Iterable
 
 from cosmos_mongo_compare.compare import Diff
 from cosmos_mongo_compare.serialization import json_default
+
+
+_FILENAME_SAFE_RE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def _collection_log_path(*, output_dir: str, collection: str) -> str:
+    safe = _FILENAME_SAFE_RE.sub("_", collection).strip("._-") or "collection"
+    return os.path.join(output_dir, f"{safe}_mismatches.jsonl")
 
 
 @dataclass
@@ -35,7 +44,7 @@ class CollectionStats:
 
 
 def clear_collection_mismatch_log(*, output_dir: str, collection: str) -> None:
-    path = os.path.join(output_dir, f"{collection}_mismatches.jsonl")
+    path = _collection_log_path(output_dir=output_dir, collection=collection)
     try:
         os.remove(path)
     except FileNotFoundError:
@@ -53,7 +62,7 @@ def write_collection_mismatch_log(
     diffs: Iterable[Diff],
 ) -> None:
     os.makedirs(output_dir, exist_ok=True)
-    path = os.path.join(output_dir, f"{collection}_mismatches.jsonl")
+    path = _collection_log_path(output_dir=output_dir, collection=collection)
     record = {
         "ts": datetime.utcnow().isoformat() + "Z",
         "business_key": business_key,

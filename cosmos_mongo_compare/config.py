@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
-from typing import Optional
+from typing import Any, Mapping, Optional
 
 import yaml
 
@@ -59,6 +59,9 @@ class ConfigError(ValueError):
     pass
 
 
+_FIELD_PATH_SEGMENT_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_-]*$")
+
+
 def _require(mapping: Mapping[str, Any], key: str, where: str) -> Any:
     if key not in mapping:
         raise ConfigError(f"Missing required config key: {where}.{key}")
@@ -91,13 +94,29 @@ def _as_str_list(value: Any, where: str) -> tuple[str, ...]:
     return tuple(value)
 
 
+def _as_mapping(value: Any, where: str) -> Mapping[str, Any]:
+    if not isinstance(value, dict):
+        raise ConfigError(f"Expected object/map at {where}")
+    return value
+
+
+def _as_field_path(value: Any, where: str) -> str:
+    s = _as_str(value, where)
+    parts = s.split(".")
+    if not parts or any(not p or _FIELD_PATH_SEGMENT_RE.fullmatch(p) is None for p in parts):
+        raise ConfigError(
+            f"Expected field path at {where} (e.g. 'id', '_id', 'customer.id', 'customer-id'; dot-separated, segments use letters/numbers/_/-)."
+        )
+    return s
+
+
 def load_config(path: str) -> AppConfig:
     raw = _load_raw_config(path)
     if not isinstance(raw, dict):
         raise ConfigError("Config root must be an object/map.")
 
-    cosmos_raw = _require(raw, "cosmos", "root")
-    mongo_raw = _require(raw, "mongodb", "root")
+    cosmos_raw = _as_mapping(_require(raw, "cosmos", "root"), "cosmos")
+    mongo_raw = _as_mapping(_require(raw, "mongodb", "root"), "mongodb")
     collections_raw = raw.get("collections", None)
     if collections_raw is None:
         collections_raw = {}
@@ -107,7 +126,7 @@ def load_config(path: str) -> AppConfig:
     sampling_raw = raw.get("sampling", None)
     if sampling_raw is None:
         sampling_raw = {}
-    logging_raw = _require(raw, "logging", "root")
+    logging_raw = _as_mapping(_require(raw, "logging", "root"), "logging")
 
     cosmos_api = _as_str(_require(cosmos_raw, "api", "cosmos"), "cosmos.api").lower()
     cosmos_database = _as_str(_require(cosmos_raw, "database", "cosmos"), "cosmos.database")
@@ -126,8 +145,7 @@ def load_config(path: str) -> AppConfig:
         cosmos_key = _as_str(_require(cosmos_raw, "key", "cosmos"), "cosmos.key")
         cosmos_uri = None
 
-    if not isinstance(sampling_raw, dict):
-        raise ConfigError("sampling must be an object/map.")
+    sampling_raw = _as_mapping(sampling_raw, "sampling")
 
     sampling_percentage = sampling_raw.get("percentage")
     sampling_count = sampling_raw.get("count")
@@ -149,14 +167,15 @@ def load_config(path: str) -> AppConfig:
     main_log = _as_str(_require(logging_raw, "main_log", "logging"), "logging.main_log")
     output_dir = _as_str(_require(logging_raw, "output_dir", "logging"), "logging.output_dir")
 
-    if not isinstance(defaults_raw, dict):
-        raise ConfigError("collection_defaults must be an object/map.")
+    defaults_raw = _as_mapping(defaults_raw, "collection_defaults")
     defaults_enabled = defaults_raw.get("enabled", True)
     if not isinstance(defaults_enabled, bool):
         raise ConfigError("Expected boolean at collection_defaults.enabled")
     defaults_business_key_raw = defaults_raw.get("business_key", None)
     defaults_business_key = (
-        _as_str(defaults_business_key_raw, "collection_defaults.business_key") if defaults_business_key_raw is not None else None
+        _as_field_path(defaults_business_key_raw, "collection_defaults.business_key")
+        if defaults_business_key_raw is not None
+        else None
     )
     defaults_exclude_fields = _as_str_list(defaults_raw.get("exclude_fields"), "collection_defaults.exclude_fields")
     defaults_array_paths = _as_str_list(
@@ -171,8 +190,7 @@ def load_config(path: str) -> AppConfig:
     )
 
     collections: dict[str, CollectionConfig] = {}
-    if not isinstance(collections_raw, dict):
-        raise ConfigError("collections must be a mapping of collection_name -> settings.")
+    collections_raw = _as_mapping(collections_raw, "collections")
     for name, c_raw in collections_raw.items():
         if not isinstance(name, str) or not name:
             raise ConfigError("Collection names must be non-empty strings.")
@@ -183,13 +201,15 @@ def load_config(path: str) -> AppConfig:
             raise ConfigError(f"Expected boolean at collections.{name}.enabled")
 
         if enabled:
-            business_key = _as_str(
+            business_key = _as_field_path(
                 _require(c_raw, "business_key", f"collections.{name}"),
                 f"collections.{name}.business_key",
             )
         else:
             business_key_raw = c_raw.get("business_key", None)
-            business_key = _as_str(business_key_raw, f"collections.{name}.business_key") if business_key_raw is not None else None
+            business_key = (
+                _as_field_path(business_key_raw, f"collections.{name}.business_key") if business_key_raw is not None else None
+            )
         exclude_fields = _as_str_list(c_raw.get("exclude_fields"), f"collections.{name}.exclude_fields")
         array_paths = _as_str_list(
             c_raw.get("array_order_insensitive_paths"),

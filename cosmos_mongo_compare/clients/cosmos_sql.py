@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import logging
+import re
 from typing import Any, Iterable
 from typing import Optional
 
@@ -12,6 +14,19 @@ except ImportError:  # pragma: no cover
 from cosmos_mongo_compare.clients.base import SourceClient
 
 
+_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _sql_path_expr(field_path: str) -> str:
+    expr = "c"
+    for segment in field_path.split("."):
+        if _IDENTIFIER_RE.fullmatch(segment) is not None:
+            expr = f"{expr}.{segment}"
+        else:
+            expr = f"{expr}[{json.dumps(segment)}]"
+    return expr
+
+
 class CosmosSqlSourceClient(SourceClient):
     """Cosmos DB (SQL/Core API) accessed via azure-cosmos."""
 
@@ -21,6 +36,11 @@ class CosmosSqlSourceClient(SourceClient):
         self._logger = logger
         self._client = CosmosClient(endpoint, credential=key)
         self._database = self._client.get_database_client(database)
+
+    def close(self) -> None:
+        close = getattr(self._client, "close", None)
+        if callable(close):
+            close()
 
     def list_collections(self) -> list[str]:
         return sorted([c["id"] for c in self._database.list_containers()])
@@ -45,13 +65,15 @@ class CosmosSqlSourceClient(SourceClient):
 
     def iter_business_keys(self, *, collection: str, business_key: str) -> Iterable[Any]:
         container = self._container(collection)
-        query = f"SELECT VALUE c.{business_key} FROM c WHERE IS_DEFINED(c.{business_key})"
+        expr = _sql_path_expr(business_key)
+        query = f"SELECT VALUE {expr} FROM c WHERE IS_DEFINED({expr})"
         for value in container.query_items(query=query, enable_cross_partition_query=True):
             yield value
 
     def find_by_business_key(self, *, collection: str, business_key: str, key_value: Any) -> Optional[dict]:
         container = self._container(collection)
-        query = f"SELECT TOP 1 * FROM c WHERE c.{business_key} = @v"
+        expr = _sql_path_expr(business_key)
+        query = f"SELECT TOP 1 * FROM c WHERE {expr} = @v"
         params = [{"name": "@v", "value": key_value}]
         results = list(
             container.query_items(

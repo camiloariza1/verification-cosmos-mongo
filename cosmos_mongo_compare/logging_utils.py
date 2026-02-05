@@ -20,8 +20,12 @@ def build_logger(main_log_path: str) -> logging.Logger:
     file_handler.setFormatter(formatter)
     handlers.append(file_handler)
 
+    for h in list(logger.handlers):
+        try:
+            h.close()
+        except Exception:
+            pass
     logger.handlers.clear()
     for h in handlers:
         logger.addHandler(h)
     return logger
-

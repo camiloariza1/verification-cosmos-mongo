@@ -11,6 +11,9 @@ class MongoTargetClient:
         self._client = MongoClient(uri)
         self._db = self._client[database]
 
+    def close(self) -> None:
+        self._client.close()
+
     def count_documents(self, collection: str) -> int:
         return int(self._db[collection].count_documents({}))
 

@@ -25,3 +25,6 @@ class SourceClient(ABC):
     @abstractmethod
     def find_by_business_key(self, *, collection: str, business_key: str, key_value: Any) -> Optional[dict]:
         raise NotImplementedError
+
+    def close(self) -> None:
+        return None

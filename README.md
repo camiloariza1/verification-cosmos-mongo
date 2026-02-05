@@ -87,6 +87,11 @@ Each mismatch record includes the source doc, target doc, and a structured list 
 python3 -m unittest discover -s tests -p "test_*.py"
 ```
 
+Or, if you installed dev deps (`pip install -e ".[dev]"`):
+```bash
+python3 -m pytest
+```
+
 ## Architecture (high level)
 
 - `cosmos_mongo_compare/clients/*`: Cosmos (Mongo/SQL) + MongoDB access

@@ -21,6 +21,9 @@ class CosmosMongoSourceClient(SourceClient):
         self._client = MongoClient(uri)
         self._db = self._client[database]
 
+    def close(self) -> None:
+        self._client.close()
+
     def list_collections(self) -> list[str]:
         return sorted(self._db.list_collection_names())
 
