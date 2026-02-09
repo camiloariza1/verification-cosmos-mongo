@@ -50,6 +50,13 @@ python -m pip install -U pip
 python -m pip install -r requirements.txt
 ```
 
+Troubleshooting (Windows / Python 3.13):
+- If you see `No matching distribution found` or `from versions: none`, your `pip` is usually too old or configured to use no index / a private index.
+- Try:
+  - `python -m ensurepip --upgrade`
+  - `python -m pip install --upgrade --isolated pip`
+  - `python -m pip install --isolated -r requirements.txt`
+
 Recommended (installs the `cosmos-mongo-compare` CLI entrypoint):
 ```bash
 python -m pip install -e .
