@@ -13,16 +13,40 @@ It samples documents from the source, matches by a per-collection business key, 
 Requirements:
 - Python **3.9+** (works with **Python 3.13**)
 
-If your Python 3.13 executable is named `python3.13`, replace `python` with `python3.13` in the commands below.
+### Windows (PowerShell)
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
+```powershell
+# Create + activate venv (explicitly use Python 3.13)
+py -3.13 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+# Note: `source .venv/bin/activate` is for bash, not PowerShell.
+# If PowerShell blocks script execution, run:
+#   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 # Recommended (helps on newer Python versions like 3.13)
 python -m pip install -U pip
 
 # Minimal runtime deps
+python -m pip install -r requirements.txt
+```
+
+### Windows (cmd.exe)
+
+```bat
+py -3.13 -m venv .venv
+.\.venv\Scripts\activate
+
+python -m pip install -U pip
+python -m pip install -r requirements.txt
+```
+
+### macOS/Linux (bash/zsh)
+
+```bash
+python -m venv .venv  # if this fails, try: python3 -m venv .venv
+source .venv/bin/activate
+
+python -m pip install -U pip
 python -m pip install -r requirements.txt
 ```
 
@@ -71,30 +95,52 @@ Supported variables:
 - `MONGODB_URI` (MongoDB connection string)
 - `COSMOS_API`, `COSMOS_DATABASE`, `MONGODB_DATABASE` (optional convenience overrides)
 
+Example (Windows PowerShell):
+```powershell
+$env:COSMOS_API="sql"
+$env:COSMOS_DATABASE="source_db"
+$env:COSMOS_ENDPOINT="https://account.documents.azure.com:443/"
+$env:COSMOS_KEY="***"
+$env:MONGODB_URI="mongodb://localhost:27017"
+$env:MONGODB_DATABASE="target_db"
+```
+
+Example (Windows cmd.exe):
+```bat
+set COSMOS_API=sql
+set COSMOS_DATABASE=source_db
+set COSMOS_ENDPOINT=https://account.documents.azure.com:443/
+set COSMOS_KEY=***
+set MONGODB_URI=mongodb://localhost:27017
+set MONGODB_DATABASE=target_db
+```
+
 ## Run
 
+On Windows, after activating the venv, the commands below work the same in PowerShell or cmd.exe. If `python` doesn't point to your venv / Python 3.13, use `py -3.13` instead.
+
 All collections listed in config:
-```bash
+```text
 cosmos-mongo-compare --config config.yaml
 ```
 
 Example with a config under `configs/`:
-```bash
+```text
 cosmos-mongo-compare --config configs/nlp-member.yaml
 ```
 
 Single collection:
-```bash
+```text
 cosmos-mongo-compare --config config.yaml --collection customers
 ```
 
 List all Cosmos collections and compare those that have explicit config entries (if `collection_defaults` is set, it will be used for the rest):
-```bash
+```text
 cosmos-mongo-compare --config config.yaml --all-collections
 ```
 
 If you didn't install the package, you can run the script directly:
-```bash
+```text
 python cosmos_mongo_compare.py --config config.yaml
 ```
 
@@ -107,12 +153,12 @@ Each mismatch record includes the source doc, target doc, and a structured list 
 
 ## Tests
 
-```bash
+```text
 python -m unittest discover -s tests -p "test_*.py"
 ```
 
 Or, if you installed dev deps (`pip install -e ".[dev]"`):
-```bash
+```text
 python -m pytest
 ```
 
