@@ -54,8 +54,13 @@ Troubleshooting (Windows / Python 3.13):
 - If you see `No matching distribution found` or `from versions: none`, your `pip` is usually too old or configured to use no index / a private index.
 - Try:
   - `python -m ensurepip --upgrade`
-  - `python -m pip install --upgrade --isolated pip`
+  - `python -m pip install --upgrade --isolated pip setuptools wheel`
   - `python -m pip install --isolated -r requirements.txt`
+- If it still fails, check for environment variables like `PIP_NO_INDEX`, `PIP_INDEX_URL`, `PIP_EXTRA_INDEX_URL`, `PIP_FIND_LINKS`:
+  - PowerShell: `Get-ChildItem Env:PIP*`
+  - cmd.exe: `set PIP`
+- You can also force PyPI for a single command:
+  - `python -m pip install -r requirements.txt --index-url https://pypi.org/simple`
 
 Recommended (installs the `cosmos-mongo-compare` CLI entrypoint):
 ```bash
