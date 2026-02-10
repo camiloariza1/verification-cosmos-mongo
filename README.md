@@ -61,6 +61,14 @@ Troubleshooting (Windows / Python 3.13):
   - cmd.exe: `set PIP`
 - You can also force PyPI for a single command:
   - `python -m pip install -r requirements.txt --index-url https://pypi.org/simple`
+- If you are on a corporate network, you may need a proxy to reach PyPI:
+  - PowerShell: `Get-ChildItem Env:*PROXY*`
+  - Then set e.g. `$env:HTTPS_PROXY="http://proxy.host:8080"` (and re-run the install)
+- If your environment blocks direct PyPI access, use your company index/mirror:
+  - PowerShell example: `$env:PIP_INDEX_URL="https://your.index/simple"`
+- Offline install option (download once, install from a local folder):
+  - On a machine with internet: `python -m pip download -r requirements.txt -d wheels`
+  - Copy `wheels/` to the target machine, then: `python -m pip install --no-index --find-links wheels -r requirements.txt`
 
 Recommended (installs the `cosmos-mongo-compare` CLI entrypoint):
 ```bash
