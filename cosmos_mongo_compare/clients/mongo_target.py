@@ -18,7 +18,8 @@ class MongoTargetClient:
             raise RuntimeError(
                 "Unable to connect to target MongoDB (timed out). "
                 "Check MONGODB_URI and network access (VPN/firewall/IP allowlist). "
-                "If your host starts with 'pl-' and ports are 1024-1026, it's likely a PrivateLink-only endpoint."
+                "If your host starts with 'pl-' and ports are 1024-1026, it's likely a PrivateLink-only endpoint. "
+                f"Details: {exc}"
             ) from exc
         except OperationFailure as exc:
             raise RuntimeError(

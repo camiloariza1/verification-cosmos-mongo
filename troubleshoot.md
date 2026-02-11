@@ -141,6 +141,13 @@ Try forcing TLS 1.2 for PyMongo (env var used by this tool):
 $env:MONGODB_FORCE_TLS12="1"
 ```
 
+If you still get timeouts, you can lower timeouts to fail faster and see the detailed per-host error messages:
+```powershell
+$env:MONGODB_SERVER_SELECTION_TIMEOUT_MS="5000"
+$env:MONGODB_CONNECT_TIMEOUT_MS="5000"
+$env:MONGODB_SOCKET_TIMEOUT_MS="5000"
+```
+
 ## Cosmos SQL/Core API: dependency check
 
 If you’re using Cosmos SQL/Core API, confirm `azure-cosmos` is importable:
