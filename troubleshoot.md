@@ -148,6 +148,26 @@ $env:MONGODB_CONNECT_TIMEOUT_MS="5000"
 $env:MONGODB_SOCKET_TIMEOUT_MS="5000"
 ```
 
+If the error persists but MongoDB Compass works from the same machine, try these URI toggles to isolate the cause:
+
+1) Disable OCSP endpoint checking (often helps on restricted networks):
+```powershell
+# Append to your existing MONGODB_URI:
+#   &tlsDisableOCSPEndpointCheck=true
+```
+
+2) Diagnostic only: disable TLS validation (proves whether you have a trust/CA chain issue).
+```powershell
+# Append to your existing MONGODB_URI:
+#   &tlsInsecure=true
+#
+# IMPORTANT: do not use tlsInsecure=true long-term in production.
+```
+
+If `tlsInsecure=true` makes it work, fix trust properly instead:
+- Ensure your system trusts the correct CA chain, or
+- Provide `tlsCAFile` in the URI pointing at the required CA bundle (common in corporate SSL inspection setups).
+
 ## Cosmos SQL/Core API: dependency check
 
 If you’re using Cosmos SQL/Core API, confirm `azure-cosmos` is importable:
