@@ -70,6 +70,15 @@ Troubleshooting (Windows / Python 3.13):
   - On a machine with internet: `python -m pip download -r requirements.txt -d wheels`
   - Copy `wheels/` to the target machine, then: `python -m pip install --no-index --find-links wheels -r requirements.txt`
 
+Troubleshooting (MongoDB connection):
+- If you see `ServerSelectionTimeoutError`, the tool could not reach your MongoDB server. Common causes:
+  - Not on the required VPN / network
+  - Firewall blocking outbound ports
+  - MongoDB Atlas IP access list not allowing your current public IP
+  - Using a PrivateLink-only connection string outside the private network (hostnames often start with `pl-` and use ports `1024-1026`)
+- Quick connectivity test:
+  - `python -c "import os; from pymongo import MongoClient; c=MongoClient(os.environ['MONGODB_URI']); print(c.admin.command('ping'))"`
+
 Recommended (installs the `cosmos-mongo-compare` CLI entrypoint):
 ```bash
 python -m pip install -e .
