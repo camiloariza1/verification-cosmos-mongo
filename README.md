@@ -50,35 +50,6 @@ python -m pip install -U pip
 python -m pip install -r requirements.txt
 ```
 
-Troubleshooting (Windows / Python 3.13):
-- If you see `No matching distribution found` or `from versions: none`, your `pip` is usually too old or configured to use no index / a private index.
-- Try:
-  - `python -m ensurepip --upgrade`
-  - `python -m pip install --upgrade --isolated pip setuptools wheel`
-  - `python -m pip install --isolated -r requirements.txt`
-- If it still fails, check for environment variables like `PIP_NO_INDEX`, `PIP_INDEX_URL`, `PIP_EXTRA_INDEX_URL`, `PIP_FIND_LINKS`:
-  - PowerShell: `Get-ChildItem Env:PIP*`
-  - cmd.exe: `set PIP`
-- You can also force PyPI for a single command:
-  - `python -m pip install -r requirements.txt --index-url https://pypi.org/simple`
-- If you are on a corporate network, you may need a proxy to reach PyPI:
-  - PowerShell: `Get-ChildItem Env:*PROXY*`
-  - Then set e.g. `$env:HTTPS_PROXY="http://proxy.host:8080"` (and re-run the install)
-- If your environment blocks direct PyPI access, use your company index/mirror:
-  - PowerShell example: `$env:PIP_INDEX_URL="https://your.index/simple"`
-- Offline install option (download once, install from a local folder):
-  - On a machine with internet: `python -m pip download -r requirements.txt -d wheels`
-  - Copy `wheels/` to the target machine, then: `python -m pip install --no-index --find-links wheels -r requirements.txt`
-
-Troubleshooting (MongoDB connection):
-- If you see `ServerSelectionTimeoutError`, the tool could not reach your MongoDB server. Common causes:
-  - Not on the required VPN / network
-  - Firewall blocking outbound ports
-  - MongoDB Atlas IP access list not allowing your current public IP
-  - Using a PrivateLink-only connection string outside the private network (hostnames often start with `pl-` and use ports `1024-1026`)
-- Quick connectivity test:
-  - `python -c "import os; from pymongo import MongoClient; c=MongoClient(os.environ['MONGODB_URI']); print(c.admin.command('ping'))"`
-
 Recommended (installs the `cosmos-mongo-compare` CLI entrypoint):
 ```bash
 python -m pip install -e .
@@ -202,3 +173,7 @@ python -m pytest
 
 - **Deterministic sampling:** when `sampling.seed` is set (or when Cosmos SQL forces it), the tool selects the `K` documents with the smallest `sha256(seed:key)` scores. This is deterministic and order-independent, but requires scanning business keys in the source collection.
 - **Exclusions:** `exclude_fields` supports simple names (excluded at any depth) and dotted paths (excluded only at that path).
+
+## Troubleshooting
+
+See `troubleshoot.md`.
