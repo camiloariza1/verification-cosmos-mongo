@@ -3,13 +3,14 @@ from __future__ import annotations
 from typing import Any
 from typing import Optional
 
-from pymongo import MongoClient
 from pymongo.errors import OperationFailure, ServerSelectionTimeoutError
+
+from cosmos_mongo_compare.clients.mongo_client_factory import build_mongo_client
 
 
 class MongoTargetClient:
     def __init__(self, uri: str, database: str):
-        self._client = MongoClient(uri)
+        self._client = build_mongo_client(uri, force_tls12_env="MONGODB_FORCE_TLS12")
         self._db = self._client[database]
         try:
             self._client.admin.command("ping")

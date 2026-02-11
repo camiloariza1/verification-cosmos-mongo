@@ -129,6 +129,18 @@ python -c "import os; from pymongo import MongoClient; c=MongoClient(os.environ[
 
 If Compass works but Python does not, it can be per-application firewall/EDR blocking `...\your-repo\.venv\Scripts\python.exe`.
 
+## MongoDB: `SSL handshake failed` / WinError 10054
+
+If you see errors like:
+- `SSL handshake failed ... [WinError 10054] An existing connection was forcibly closed by the remote host`
+
+TCP connectivity can still succeed (`Test-NetConnection` returns `TcpTestSucceeded: True`) while TLS handshakes are reset by a middlebox.
+
+Try forcing TLS 1.2 for PyMongo (env var used by this tool):
+```powershell
+$env:MONGODB_FORCE_TLS12="1"
+```
+
 ## Cosmos SQL/Core API: dependency check
 
 If you’re using Cosmos SQL/Core API, confirm `azure-cosmos` is importable:
@@ -139,4 +151,3 @@ python -c "import azure.cosmos; print('azure-cosmos ok')"
 And make sure these are set (recommended to keep secrets out of `config.yaml`):
 - `COSMOS_ENDPOINT`
 - `COSMOS_KEY`
-
