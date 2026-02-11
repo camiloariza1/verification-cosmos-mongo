@@ -5,7 +5,7 @@ import ssl
 from typing import Any
 
 from pymongo import MongoClient
-from pymongo.uri_parser import parse_uri
+from pymongo import ssl_support
 
 
 def _env_truthy(name: str) -> bool:
@@ -13,6 +13,10 @@ def _env_truthy(name: str) -> bool:
     if raw is None:
         return False
     return raw.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+_ORIGINAL_GET_SSL_CONTEXT = ssl_support.get_ssl_context
+_TLS12_PATCHED = False
 
 
 def build_mongo_client(uri: str, *, force_tls12_env: str | None = None) -> MongoClient[Any]:
@@ -27,17 +31,17 @@ def build_mongo_client(uri: str, *, force_tls12_env: str | None = None) -> Mongo
 
     force_tls12 = _env_truthy(force_tls12_env) if force_tls12_env else False
     if force_tls12:
-        ssl_context = ssl.create_default_context()
-        ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
-        ssl_context.maximum_version = ssl.TLSVersion.TLSv1_2
-        kwargs["ssl_context"] = ssl_context
+        global _TLS12_PATCHED
 
-        # Only set tls=True if the URI does not explicitly specify TLS/SSL.
-        # (Avoids ConfigurationError due to duplicate/conflicting options.)
-        parsed = parse_uri(uri)
-        options = {k.lower() for k in (parsed.get("options") or {}).keys()}
-        if "tls" not in options and "ssl" not in options:
-            kwargs["tls"] = True
+        def get_ssl_context_tls12(*args: Any, **inner_kwargs: Any):  # type: ignore[no-untyped-def]
+            ctx = _ORIGINAL_GET_SSL_CONTEXT(*args, **inner_kwargs)
+            if hasattr(ctx, "minimum_version") and hasattr(ssl, "TLSVersion"):
+                ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+                ctx.maximum_version = ssl.TLSVersion.TLSv1_2
+            return ctx
+
+        if not _TLS12_PATCHED:
+            ssl_support.get_ssl_context = get_ssl_context_tls12  # type: ignore[assignment]
+            _TLS12_PATCHED = True
 
     return MongoClient(uri, **kwargs)
-
