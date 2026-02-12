@@ -30,16 +30,49 @@ def _env_int(name: str) -> int | None:
 
 
 _ORIGINAL_GET_SSL_CONTEXT = ssl_support.get_ssl_context
-_TLS12_PATCHED = False
+_PATCHED = False
+
+
+def _load_windows_system_certs(ctx: ssl.SSLContext) -> None:
+    """Load certificates from the Windows certificate store into an SSLContext.
+
+    Python's bundled OpenSSL ignores the Windows cert store by default.
+    This bridges the gap so certs installed via certlm.msc are trusted.
+    """
+    if os.name != "nt":
+        return
+    try:
+        import _ssl  # noqa: PLC0415
+
+        for store_name in ("CA", "ROOT"):
+            try:
+                certs = _ssl.enum_certificates(store_name)  # type: ignore[attr-defined]
+            except AttributeError:
+                break
+            for cert, _encoding, trust in certs:
+                if trust is True or trust == "1.3.6.1.5.5.7.3.1":  # serverAuth OID
+                    try:
+                        ctx.load_verify_locations(cadata=cert if isinstance(cert, str) else None,
+                                                  cafile=None)
+                    except ssl.SSLError:
+                        pass
+                    try:
+                        if isinstance(cert, bytes):
+                            ctx.load_verify_locations(cadata=ssl.DER_cert_to_PEM_cert(cert))
+                    except (ssl.SSLError, ValueError):
+                        pass
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def build_mongo_client(uri: str, *, force_tls12_env: str | None = None) -> MongoClient[Any]:
     """
-    Build a PyMongo MongoClient from a URI, optionally forcing TLS 1.2.
+    Build a PyMongo MongoClient from a URI with corporate-friendly TLS.
 
-    Why this exists:
-    - Some environments (certain VPNs / middleboxes) reset TLS 1.3 handshakes.
-      Forcing TLS 1.2 can make PyMongo behave more like Compass and succeed.
+    Handles:
+    - Loading Windows certificate store certs (corporate CAs installed via certlm.msc)
+    - Reading CA bundle from REQUESTS_CA_BUNDLE / SSL_CERT_FILE env vars
+    - Optionally forcing TLS 1.2 for middleboxes that reject TLS 1.3
     """
     kwargs: dict[str, Any] = {}
 
@@ -64,23 +97,27 @@ def build_mongo_client(uri: str, *, force_tls12_env: str | None = None) -> Mongo
         if ca_file and os.path.isfile(ca_file):
             kwargs["tlsCAFile"] = ca_file
 
+    # Monkey-patch PyMongo's SSL context creation to:
+    # 1. Load Windows system certs (corporate CAs from certlm.msc)
+    # 2. Optionally force TLS 1.2
     force_tls12 = _env_truthy(force_tls12_env) if force_tls12_env else False
-    if force_tls12:
-        global _TLS12_PATCHED
 
-        def get_ssl_context_tls12(*args: Any, **inner_kwargs: Any):  # type: ignore[no-untyped-def]
-            ctx = _ORIGINAL_GET_SSL_CONTEXT(*args, **inner_kwargs)
-            if hasattr(ctx, "minimum_version") and hasattr(ssl, "TLSVersion"):
-                ctx.minimum_version = ssl.TLSVersion.TLSv1_2
-                ctx.maximum_version = ssl.TLSVersion.TLSv1_2
-            return ctx
+    global _PATCHED
 
-        if not _TLS12_PATCHED:
-            ssl_support.get_ssl_context = get_ssl_context_tls12  # type: ignore[assignment]
-            _TLS12_PATCHED = True
+    def get_ssl_context_patched(*args: Any, **inner_kwargs: Any):  # type: ignore[no-untyped-def]
+        ctx = _ORIGINAL_GET_SSL_CONTEXT(*args, **inner_kwargs)
+        _load_windows_system_certs(ctx)
+        if force_tls12 and hasattr(ctx, "minimum_version") and hasattr(ssl, "TLSVersion"):
+            ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+            ctx.maximum_version = ssl.TLSVersion.TLSv1_2
+        return ctx
 
-        # Ensure TLS is enabled if the URI doesn't specify it.
-        if "tls" not in option_keys and "ssl" not in option_keys:
-            kwargs["tls"] = True
+    if not _PATCHED:
+        ssl_support.get_ssl_context = get_ssl_context_patched  # type: ignore[assignment]
+        _PATCHED = True
+
+    # Ensure TLS is enabled if the URI doesn't specify it.
+    if "tls" not in option_keys and "ssl" not in option_keys:
+        kwargs["tls"] = True
 
     return MongoClient(uri, **kwargs)
