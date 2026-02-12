@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from typing import Any, Iterable
 from typing import Optional
@@ -38,7 +39,12 @@ class CosmosSqlSourceClient(SourceClient):
                 "(Python 3.13 support starts at azure-cosmos 4.8.0)."
             )
         self._logger = logger
-        self._client = CosmosClient(endpoint, credential=key)
+        # Pass corporate CA bundle so azure-cosmos/requests trusts the proxy cert.
+        ca_file = os.environ.get("REQUESTS_CA_BUNDLE") or os.environ.get("SSL_CERT_FILE")
+        cosmos_kwargs: dict[str, Any] = {}
+        if ca_file and os.path.isfile(ca_file):
+            cosmos_kwargs["connection_verify"] = ca_file
+        self._client = CosmosClient(endpoint, credential=key, **cosmos_kwargs)
         self._database = self._client.get_database_client(database)
 
     def close(self) -> None:
