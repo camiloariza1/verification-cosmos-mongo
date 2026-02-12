@@ -57,6 +57,13 @@ def build_mongo_client(uri: str, *, force_tls12_env: str | None = None) -> Mongo
     if st is not None and "sockettimeoutms" not in option_keys:
         kwargs["socketTimeoutMS"] = st
 
+    # Resolve custom CA bundle for corporate TLS inspection proxies.
+    # PyMongo does NOT read REQUESTS_CA_BUNDLE or SSL_CERT_FILE on its own.
+    if "tlscafile" not in option_keys:
+        ca_file = os.environ.get("REQUESTS_CA_BUNDLE") or os.environ.get("SSL_CERT_FILE")
+        if ca_file and os.path.isfile(ca_file):
+            kwargs["tlsCAFile"] = ca_file
+
     force_tls12 = _env_truthy(force_tls12_env) if force_tls12_env else False
     if force_tls12:
         global _TLS12_PATCHED
