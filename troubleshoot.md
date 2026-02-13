@@ -129,6 +129,48 @@ python -c "import os; from pymongo import MongoClient; c=MongoClient(os.environ[
 
 If Compass works but Python does not, it can be per-application firewall/EDR blocking `...\your-repo\.venv\Scripts\python.exe`.
 
+### Test if `python.exe` can reach the host at all (TCP-only, no TLS)
+
+This isolates whether endpoint security / EDR is blocking `python.exe` from connecting:
+
+```powershell
+python -c "
+import socket
+host = 'pl-0-eastus2-azure.6tu3s.mongodb.net'  # replace with your host
+for port in [1024, 1025, 1026]:
+    try:
+        s = socket.create_connection((host, port), timeout=10)
+        print(f'Port {port}: TCP OK')
+        s.close()
+    except Exception as e:
+        print(f'Port {port}: TCP FAIL: {e}')
+"
+```
+
+| Result | Meaning |
+|--------|---------|
+| All TCP OK | Python can open sockets — problem is TLS-specific (see SSL handshake section below). |
+| All TCP FAIL | `python.exe` is being blocked at the network level by EDR / endpoint firewall. Ask IT to allowlist your Python executable. |
+
+If TCP fails from Python but `Test-NetConnection` works from PowerShell, confirm the
+exact executable being blocked:
+
+```powershell
+python -c "import sys; print(sys.executable)"
+# e.g. C:\Users\CAA1969\migration\verification-cosmos-mongo\.venv\Scripts\python.exe
+```
+
+Give this path to your IT/security team and ask them to allowlist it for outbound
+connections on ports 1024-1026.
+
+### Test TLS from outside Python (curl)
+
+If Python is blocked, verify TLS works from other Windows tools:
+
+```powershell
+curl https://pl-0-eastus2-azure.6tu3s.mongodb.net:1024 --connect-timeout 10 -v 2>&1 | Select-String -Pattern "SSL|TLS|error|Connected"
+```
+
 ## MongoDB: `SSL handshake failed` / WinError 10054
 
 If you see errors like:
