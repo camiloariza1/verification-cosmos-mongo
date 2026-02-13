@@ -168,6 +168,105 @@ If `tlsInsecure=true` makes it work, fix trust properly instead:
 - Ensure your system trusts the correct CA chain, or
 - Provide `tlsCAFile` in the URI pointing at the required CA bundle (common in corporate SSL inspection setups).
 
+## MongoDB: SSL handshake diagnostic (bypasses PyMongo)
+
+If you suspect the issue is Python's TLS stack vs your network/proxy, run this
+raw-socket diagnostic to **remove PyMongo from the equation entirely**:
+
+```powershell
+python -c "
+import ssl, socket
+host = 'pl-0-eastus2-azure.6tu3s.mongodb.net'  # replace with your host
+port = 1024                                      # replace with your port
+
+print('=== Test 1: Default context ===')
+try:
+    ctx = ssl.create_default_context()
+    s = socket.create_connection((host, port), timeout=10)
+    ss = ctx.wrap_socket(s, server_hostname=host)
+    print('OK:', ss.version()); ss.close()
+except Exception as e:
+    print('FAIL:', e)
+
+print('=== Test 2: TLS 1.2, no cert verify ===')
+try:
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    ctx.maximum_version = ssl.TLSVersion.TLSv1_2
+    s = socket.create_connection((host, port), timeout=10)
+    ss = ctx.wrap_socket(s, server_hostname=host)
+    print('OK:', ss.version()); ss.close()
+except Exception as e:
+    print('FAIL:', e)
+
+print('=== Test 3: TLS 1.2, no cert verify, no SNI ===')
+try:
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    ctx.maximum_version = ssl.TLSVersion.TLSv1_2
+    s = socket.create_connection((host, port), timeout=10)
+    ss = ctx.wrap_socket(s)
+    print('OK:', ss.version()); ss.close()
+except Exception as e:
+    print('FAIL:', e)
+
+print('=== Test 4: TLS 1.3, no cert verify ===')
+try:
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_3
+    s = socket.create_connection((host, port), timeout=10)
+    ss = ctx.wrap_socket(s, server_hostname=host)
+    print('OK:', ss.version()); ss.close()
+except Exception as e:
+    print('FAIL:', e)
+"
+```
+
+**Reading the results:**
+
+| Result | Meaning |
+|--------|---------|
+| All 4 FAIL with `WinError 10054` | Python's OpenSSL cannot handshake at all — a network appliance (firewall/DPI/IPS) is killing TLS on ports 1024-1026. Ask your network team to allow TLS traffic on those ports. |
+| Test 1 fails, Test 2 passes | Certificate validation issue — your CA bundle is missing the required CA. Install the corporate CA via `certlm.msc` and set `REQUESTS_CA_BUNDLE`. |
+| Tests with SNI fail, without SNI pass | A proxy is doing SNI-based filtering. |
+| TLS 1.2 passes, TLS 1.3 fails | A middlebox doesn't support TLS 1.3. Set `MONGODB_FORCE_TLS12=1`. |
+| All 4 pass | Python's TLS works fine — the issue is PyMongo-specific (raise an issue). |
+
+## Corporate TLS inspection (CA bundle)
+
+If your network uses a TLS inspection proxy (common in corporate environments),
+Python's bundled OpenSSL does **not** automatically trust the proxy's CA.
+Compass works because it uses the Windows certificate store.
+
+### Option A — Environment variables + code support (recommended)
+
+This tool reads `REQUESTS_CA_BUNDLE` or `SSL_CERT_FILE` and passes the CA
+bundle to both PyMongo (`tlsCAFile`) and the Azure Cosmos SDK (`connection_verify`).
+
+```powershell
+$env:REQUESTS_CA_BUNDLE = "C:\path\to\corporate-ca-bundle.pem"
+$env:SSL_CERT_FILE      = "C:\path\to\corporate-ca-bundle.pem"
+```
+
+### Option B — Install cert into Windows store
+
+1. Press `Win + R`, type `certlm.msc`, press Enter.
+2. Right-click **Trusted Root Certification Authorities → All Tasks → Import**.
+3. Import your corporate CA `.crt` or `.pem` file.
+
+The tool automatically loads the Windows certificate store into PyMongo's SSL
+context on Windows, so certs installed this way are trusted without extra env vars.
+
+### Option C — Append to URI
+
+```
+mongodb+srv://.../?tlsCAFile=C%3A%5Cpath%5Cto%5Cca.pem
+```
+
 ## Cosmos SQL/Core API: dependency check
 
 If you’re using Cosmos SQL/Core API, confirm `azure-cosmos` is importable:
