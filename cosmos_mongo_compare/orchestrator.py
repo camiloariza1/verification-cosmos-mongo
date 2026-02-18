@@ -21,7 +21,7 @@ def run_compare(
     all_collections: bool,
 ) -> None:
     source = _build_source_client(cfg, logger)
-    target = MongoTargetClient(cfg.mongodb.uri, cfg.mongodb.database)
+    target = MongoTargetClient(cfg.mongodb.uri, cfg.mongodb.database, logger=logger)
 
     try:
         if single_collection:
@@ -111,7 +111,7 @@ def run_compare(
 def _build_source_client(cfg: AppConfig, logger: logging.Logger):
     if cfg.cosmos.api == "mongo":
         assert cfg.cosmos.uri is not None
-        return CosmosMongoSourceClient(cfg.cosmos.uri, cfg.cosmos.database)
+        return CosmosMongoSourceClient(cfg.cosmos.uri, cfg.cosmos.database, logger=logger)
     if cfg.cosmos.api == "sql":
         assert cfg.cosmos.endpoint is not None and cfg.cosmos.key is not None
         return CosmosSqlSourceClient(cfg.cosmos.endpoint, cfg.cosmos.key, cfg.cosmos.database, logger=logger)

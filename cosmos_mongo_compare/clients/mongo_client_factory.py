@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import ssl
+import logging
 from typing import Any
 
 from pymongo import MongoClient
@@ -65,7 +66,12 @@ def _load_windows_system_certs(ctx: ssl.SSLContext) -> None:
         pass
 
 
-def build_mongo_client(uri: str, *, force_tls12_env: str | None = None) -> MongoClient[Any]:
+def build_mongo_client(
+    uri: str,
+    *,
+    force_tls12_env: str | None = None,
+    logger: logging.Logger | None = None,
+) -> MongoClient[Any]:
     """
     Build a PyMongo MongoClient from a URI with corporate-friendly TLS.
 
@@ -74,10 +80,19 @@ def build_mongo_client(uri: str, *, force_tls12_env: str | None = None) -> Mongo
     - Reading CA bundle from REQUESTS_CA_BUNDLE / SSL_CERT_FILE env vars
     - Optionally forcing TLS 1.2 for middleboxes that reject TLS 1.3
     """
+    log = logger or logging.getLogger(__name__)
     kwargs: dict[str, Any] = {}
 
     parsed = parse_uri(uri)
+    hosts = [f"{host}:{port}" for host, port in parsed.get("nodelist", [])]
+    database = parsed.get("database") or "<default>"
     option_keys = {k.lower() for k in (parsed.get("options") or {}).keys()}
+    log.info(
+        "Building MongoClient for hosts=%s database=%s force_tls12_env=%s",
+        hosts if hosts else ["<unknown-host>"],
+        database,
+        force_tls12_env or "<none>",
+    )
 
     # Optional env-configurable timeouts (ms).
     sst = _env_int("MONGODB_SERVER_SELECTION_TIMEOUT_MS")
@@ -96,11 +111,14 @@ def build_mongo_client(uri: str, *, force_tls12_env: str | None = None) -> Mongo
         ca_file = os.environ.get("REQUESTS_CA_BUNDLE") or os.environ.get("SSL_CERT_FILE")
         if ca_file and os.path.isfile(ca_file):
             kwargs["tlsCAFile"] = ca_file
+            log.info("Applying MongoClient tlsCAFile from environment: %s", ca_file)
 
     # Monkey-patch PyMongo's SSL context creation to:
     # 1. Load Windows system certs (corporate CAs from certlm.msc)
     # 2. Optionally force TLS 1.2
     force_tls12 = _env_truthy(force_tls12_env) if force_tls12_env else False
+    if force_tls12:
+        log.info("Forcing TLS 1.2 for MongoClient based on env var %s", force_tls12_env)
 
     global _PATCHED
 
@@ -119,5 +137,12 @@ def build_mongo_client(uri: str, *, force_tls12_env: str | None = None) -> Mongo
     # Ensure TLS is enabled if the URI doesn't specify it.
     if "tls" not in option_keys and "ssl" not in option_keys:
         kwargs["tls"] = True
+        log.info("Enabling TLS for MongoClient because URI does not specify tls/ssl")
 
-    return MongoClient(uri, **kwargs)
+    client = MongoClient(uri, **kwargs)
+    log.info(
+        "MongoClient created for hosts=%s with kwarg keys=%s",
+        hosts if hosts else ["<unknown-host>"],
+        sorted(kwargs.keys()),
+    )
+    return client
