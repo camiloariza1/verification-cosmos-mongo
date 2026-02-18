@@ -34,6 +34,17 @@ def main(argv: Optional[list[str]] = None) -> int:
     if main_log_dir:
         os.makedirs(main_log_dir, exist_ok=True)
     logger = build_logger(cfg.logging.main_log)
+    logger.info(
+        "Starting compare run config=%s collection=%s all_collections=%s",
+        args.config,
+        args.collection or "<none>",
+        args.all_collections,
+    )
+    logger.info(
+        "Logging configured main_log=%s mismatch_output_dir=%s",
+        cfg.logging.main_log,
+        cfg.logging.output_dir,
+    )
 
     try:
         run_compare(
