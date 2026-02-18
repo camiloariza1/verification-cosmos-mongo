@@ -278,6 +278,56 @@ except Exception as e:
 | TLS 1.2 passes, TLS 1.3 fails | A middlebox doesn't support TLS 1.3. Set `MONGODB_FORCE_TLS12=1`. |
 | All 4 pass | Python's TLS works fine — the issue is PyMongo-specific (raise an issue). |
 
+## Run appears to hang / no logs (Windows)
+
+If the CLI appears to hang (especially after switching from PrivateLink to a public
+`mongodb+srv://...` URI), use this checklist.
+
+### 1) Confirm the latest logging code is loaded
+
+```powershell
+python -c "import inspect, cosmos_mongo_compare.__main__ as m; print('Starting compare run' in inspect.getsource(m.main))"
+python -c "import inspect, cosmos_mongo_compare.clients.cosmos_sql as c; print('Running Cosmos SQL business-key query' in inspect.getsource(c.CosmosSqlSourceClient.iter_business_keys))"
+```
+
+Both commands should print `True`.
+
+### 2) Run unbuffered so logs flush immediately
+
+```powershell
+python -u cosmos_mongo_compare.py --config config.yaml --collection metadata
+```
+
+In another terminal, tail the log file:
+
+```powershell
+Get-Content .\compare_summary.log -Wait
+```
+
+### 3) Isolate target MongoDB from Cosmos source
+
+Test MongoDB target only:
+
+```powershell
+python -c "import os; from pymongo import MongoClient; c=MongoClient(os.environ['MONGODB_URI'], serverSelectionTimeoutMS=8000); print(c.admin.command('ping'))"
+```
+
+Test Cosmos SQL source only:
+
+```powershell
+python -c "import os; from azure.cosmos import CosmosClient; c=CosmosClient(os.environ['COSMOS_ENDPOINT'], credential=os.environ['COSMOS_KEY']); db=c.get_database_client(os.environ['COSMOS_DATABASE']); print(db.read()['id'])"
+```
+
+### 4) Understand why it can look stuck
+
+When `sampling.seed` is set (or for Cosmos SQL paths that use deterministic selection),
+the tool iterates business keys across the source collection before choosing the sample.
+On large containers, this can take a while and look like a hang.
+
+To reduce scan time while troubleshooting:
+- Use a small `sampling.count` (for example `10`).
+- Keep `--collection <name>` so only one collection runs.
+
 ## Corporate TLS inspection (CA bundle)
 
 If your network uses a TLS inspection proxy (common in corporate environments),
