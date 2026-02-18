@@ -40,8 +40,9 @@ class CosmosSqlSourceClient(SourceClient):
                 "(Python 3.13 support starts at azure-cosmos 4.8.0)."
             )
         self._logger = logger
-        host = urlsplit(endpoint).hostname or "<unknown-host>"
-        self._logger.info("Creating Cosmos SQL source client for host=%s database=%s", host, database)
+        self._host = urlsplit(endpoint).hostname or "<unknown-host>"
+        self._database_name = database
+        self._logger.info("Creating Cosmos SQL source client for host=%s database=%s", self._host, database)
         # Pass corporate CA bundle so azure-cosmos/requests trusts the proxy cert.
         ca_file = os.environ.get("REQUESTS_CA_BUNDLE") or os.environ.get("SSL_CERT_FILE")
         cosmos_kwargs: dict[str, Any] = {}
@@ -52,7 +53,7 @@ class CosmosSqlSourceClient(SourceClient):
             self._logger.info("No custom CA bundle found for Cosmos SQL source client")
         self._client = CosmosClient(endpoint, credential=key, **cosmos_kwargs)
         self._database = self._client.get_database_client(database)
-        self._logger.info("Cosmos SQL source client created for host=%s database=%s", host, database)
+        self._logger.info("Cosmos SQL source client created for host=%s database=%s", self._host, database)
 
     def close(self) -> None:
         close = getattr(self._client, "close", None)
@@ -60,16 +61,66 @@ class CosmosSqlSourceClient(SourceClient):
             close()
 
     def list_collections(self) -> list[str]:
-        return sorted([c["id"] for c in self._database.list_containers()])
+        self._logger.info(
+            "Listing Cosmos SQL containers for host=%s database=%s",
+            self._host,
+            self._database_name,
+        )
+        try:
+            names = sorted([c["id"] for c in self._database.list_containers()])
+            self._logger.info(
+                "Listed Cosmos SQL containers for host=%s database=%s count=%s",
+                self._host,
+                self._database_name,
+                len(names),
+            )
+            return names
+        except Exception:  # noqa: BLE001
+            self._logger.exception(
+                "Failed listing Cosmos SQL containers for host=%s database=%s",
+                self._host,
+                self._database_name,
+            )
+            raise
 
     def _container(self, name: str):
+        self._logger.info(
+            "Creating Cosmos SQL container client host=%s database=%s container=%s",
+            self._host,
+            self._database_name,
+            name,
+        )
         return self._database.get_container_client(name)
 
     def count_documents(self, collection: str) -> int:
         container = self._container(collection)
         query = "SELECT VALUE COUNT(1) FROM c"
-        results = list(container.query_items(query=query, enable_cross_partition_query=True))
-        return int(results[0]) if results else 0
+        self._logger.info(
+            "Running Cosmos SQL count query host=%s database=%s container=%s",
+            self._host,
+            self._database_name,
+            collection,
+        )
+        try:
+            results = list(container.query_items(query=query, enable_cross_partition_query=True))
+            count = int(results[0]) if results else 0
+            self._logger.info(
+                "Cosmos SQL count query succeeded host=%s database=%s container=%s count=%s",
+                self._host,
+                self._database_name,
+                collection,
+                count,
+            )
+            return count
+        except Exception:  # noqa: BLE001
+            self._logger.exception(
+                "Cosmos SQL count query failed host=%s database=%s container=%s query=%s",
+                self._host,
+                self._database_name,
+                collection,
+                query,
+            )
+            raise
 
     def sample_documents(self, *, collection: str, sample_size: int) -> list[dict]:
         """
@@ -84,20 +135,65 @@ class CosmosSqlSourceClient(SourceClient):
         container = self._container(collection)
         expr = _sql_path_expr(business_key)
         query = f"SELECT VALUE {expr} FROM c WHERE IS_DEFINED({expr})"
-        for value in container.query_items(query=query, enable_cross_partition_query=True):
-            yield value
+        self._logger.info(
+            "Running Cosmos SQL business-key query host=%s database=%s container=%s business_key=%s",
+            self._host,
+            self._database_name,
+            collection,
+            business_key,
+        )
+        try:
+            for value in container.query_items(query=query, enable_cross_partition_query=True):
+                yield value
+        except Exception:  # noqa: BLE001
+            self._logger.exception(
+                "Cosmos SQL business-key query failed host=%s database=%s container=%s business_key=%s query=%s",
+                self._host,
+                self._database_name,
+                collection,
+                business_key,
+                query,
+            )
+            raise
 
     def find_by_business_key(self, *, collection: str, business_key: str, key_value: Any) -> Optional[dict]:
         container = self._container(collection)
         expr = _sql_path_expr(business_key)
         query = f"SELECT TOP 1 * FROM c WHERE {expr} = @v"
         params = [{"name": "@v", "value": key_value}]
-        results = list(
-            container.query_items(
-                query=query,
-                parameters=params,
-                enable_cross_partition_query=True,
-                max_item_count=1,
-            )
+        self._logger.info(
+            "Running Cosmos SQL point lookup host=%s database=%s container=%s business_key=%s",
+            self._host,
+            self._database_name,
+            collection,
+            business_key,
         )
-        return results[0] if results else None
+        try:
+            results = list(
+                container.query_items(
+                    query=query,
+                    parameters=params,
+                    enable_cross_partition_query=True,
+                    max_item_count=1,
+                )
+            )
+            found = bool(results)
+            self._logger.info(
+                "Cosmos SQL point lookup completed host=%s database=%s container=%s business_key=%s found=%s",
+                self._host,
+                self._database_name,
+                collection,
+                business_key,
+                found,
+            )
+            return results[0] if results else None
+        except Exception:  # noqa: BLE001
+            self._logger.exception(
+                "Cosmos SQL point lookup failed host=%s database=%s container=%s business_key=%s query=%s",
+                self._host,
+                self._database_name,
+                collection,
+                business_key,
+                query,
+            )
+            raise
