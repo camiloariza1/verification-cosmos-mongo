@@ -6,6 +6,7 @@ import os
 import re
 from typing import Any, Iterable
 from typing import Optional
+from urllib.parse import urlsplit
 
 try:
     from azure.cosmos import CosmosClient
@@ -39,13 +40,19 @@ class CosmosSqlSourceClient(SourceClient):
                 "(Python 3.13 support starts at azure-cosmos 4.8.0)."
             )
         self._logger = logger
+        host = urlsplit(endpoint).hostname or "<unknown-host>"
+        self._logger.info("Creating Cosmos SQL source client for host=%s database=%s", host, database)
         # Pass corporate CA bundle so azure-cosmos/requests trusts the proxy cert.
         ca_file = os.environ.get("REQUESTS_CA_BUNDLE") or os.environ.get("SSL_CERT_FILE")
         cosmos_kwargs: dict[str, Any] = {}
         if ca_file and os.path.isfile(ca_file):
             cosmos_kwargs["connection_verify"] = ca_file
+            self._logger.info("Using CA bundle for Cosmos SQL source client: %s", ca_file)
+        else:
+            self._logger.info("No custom CA bundle found for Cosmos SQL source client")
         self._client = CosmosClient(endpoint, credential=key, **cosmos_kwargs)
         self._database = self._client.get_database_client(database)
+        self._logger.info("Cosmos SQL source client created for host=%s database=%s", host, database)
 
     def close(self) -> None:
         close = getattr(self._client, "close", None)

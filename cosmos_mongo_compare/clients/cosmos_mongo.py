@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Iterable
 from typing import Optional
+from urllib.parse import urlsplit
 
 from pymongo import MongoClient
+from pymongo.errors import PyMongoError
 
 from cosmos_mongo_compare.clients.base import SourceClient
 
@@ -17,9 +20,22 @@ class CosmosMongoSourceClient(SourceClient):
     - Deterministic sampling (seeded) is implemented in sampling.py via iter_business_keys + find_by_business_key.
     """
 
-    def __init__(self, uri: str, database: str):
+    def __init__(self, uri: str, database: str, *, logger: logging.Logger | None = None):
+        self._logger = logger or logging.getLogger(__name__)
+        host = urlsplit(uri).hostname or "<unknown-host>"
+        self._logger.info(
+            "Creating Cosmos Mongo source client for host=%s database=%s", host, database
+        )
         self._client = MongoClient(uri)
+        self._logger.info("Cosmos Mongo source client created for host=%s database=%s", host, database)
         self._db = self._client[database]
+        try:
+            self._logger.info("Running Cosmos Mongo source ping for host=%s database=%s", host, database)
+            self._client.admin.command("ping")
+            self._logger.info("Cosmos Mongo source ping succeeded for host=%s database=%s", host, database)
+        except PyMongoError:
+            self._logger.exception("Cosmos Mongo source ping failed for host=%s database=%s", host, database)
+            raise
 
     def close(self) -> None:
         self._client.close()
