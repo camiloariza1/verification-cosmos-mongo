@@ -30,6 +30,17 @@ class SamplingConfig:
     percentage: Optional[float] = None
     count: Optional[int] = None
     seed: Optional[int] = None
+    mode: str = "auto"  # auto | deterministic | fast | bucket
+    deterministic_scan_log_every: int = 10_000
+    deterministic_max_scan_keys: Optional[int] = None
+    source_lookup_concurrency: int = 8
+    compare_concurrency: int = 8
+    compare_log_every: int = 1_000
+    bucket_field: Optional[str] = None
+    bucket_modulus: Optional[int] = None
+    bucket_count: int = 8
+    cosmos_retry_max_attempts: int = 6
+    cosmos_retry_base_delay_ms: int = 500
 
 
 @dataclass(frozen=True)
@@ -207,6 +218,80 @@ def load_config(path: str) -> AppConfig:
     if seed is not None:
         seed = _as_int(seed, "sampling.seed")
 
+    mode = _as_str(sampling_raw.get("mode", "auto"), "sampling.mode").lower()
+    if mode not in {"auto", "deterministic", "fast", "bucket"}:
+        raise ConfigError("sampling.mode must be one of: auto, deterministic, fast, bucket.")
+
+    deterministic_scan_log_every = _as_int(
+        sampling_raw.get("deterministic_scan_log_every", 10_000),
+        "sampling.deterministic_scan_log_every",
+    )
+    if deterministic_scan_log_every <= 0:
+        raise ConfigError("sampling.deterministic_scan_log_every must be >0.")
+
+    deterministic_max_scan_keys_raw = sampling_raw.get("deterministic_max_scan_keys")
+    deterministic_max_scan_keys = (
+        _as_int(deterministic_max_scan_keys_raw, "sampling.deterministic_max_scan_keys")
+        if deterministic_max_scan_keys_raw is not None
+        else None
+    )
+    if deterministic_max_scan_keys is not None and deterministic_max_scan_keys <= 0:
+        raise ConfigError("sampling.deterministic_max_scan_keys must be >0.")
+
+    source_lookup_concurrency = _as_int(
+        sampling_raw.get("source_lookup_concurrency", 8),
+        "sampling.source_lookup_concurrency",
+    )
+    if source_lookup_concurrency <= 0:
+        raise ConfigError("sampling.source_lookup_concurrency must be >0.")
+
+    compare_concurrency = _as_int(
+        sampling_raw.get("compare_concurrency", 8),
+        "sampling.compare_concurrency",
+    )
+    if compare_concurrency <= 0:
+        raise ConfigError("sampling.compare_concurrency must be >0.")
+
+    compare_log_every = _as_int(
+        sampling_raw.get("compare_log_every", 1_000),
+        "sampling.compare_log_every",
+    )
+    if compare_log_every <= 0:
+        raise ConfigError("sampling.compare_log_every must be >0.")
+
+    bucket_field_raw = sampling_raw.get("bucket_field")
+    bucket_field = _as_field_path(bucket_field_raw, "sampling.bucket_field") if bucket_field_raw is not None else None
+
+    bucket_modulus_raw = sampling_raw.get("bucket_modulus")
+    bucket_modulus = _as_int(bucket_modulus_raw, "sampling.bucket_modulus") if bucket_modulus_raw is not None else None
+    if bucket_modulus is not None and bucket_modulus <= 1:
+        raise ConfigError("sampling.bucket_modulus must be >1.")
+
+    bucket_count = _as_int(sampling_raw.get("bucket_count", 8), "sampling.bucket_count")
+    if bucket_count <= 0:
+        raise ConfigError("sampling.bucket_count must be >0.")
+
+    if (bucket_field is None) != (bucket_modulus is None):
+        raise ConfigError("sampling.bucket_field and sampling.bucket_modulus must be provided together.")
+    if bucket_modulus is not None and bucket_count > bucket_modulus:
+        raise ConfigError("sampling.bucket_count cannot be greater than sampling.bucket_modulus.")
+    if mode == "bucket" and (bucket_field is None or bucket_modulus is None):
+        raise ConfigError("sampling.mode='bucket' requires sampling.bucket_field and sampling.bucket_modulus.")
+
+    cosmos_retry_max_attempts = _as_int(
+        sampling_raw.get("cosmos_retry_max_attempts", 6),
+        "sampling.cosmos_retry_max_attempts",
+    )
+    if cosmos_retry_max_attempts <= 0:
+        raise ConfigError("sampling.cosmos_retry_max_attempts must be >0.")
+
+    cosmos_retry_base_delay_ms = _as_int(
+        sampling_raw.get("cosmos_retry_base_delay_ms", 500),
+        "sampling.cosmos_retry_base_delay_ms",
+    )
+    if cosmos_retry_base_delay_ms < 0:
+        raise ConfigError("sampling.cosmos_retry_base_delay_ms must be >=0.")
+
     main_log = _as_str(_require(logging_raw, "main_log", "logging"), "logging.main_log")
     output_dir = _as_str(_require(logging_raw, "output_dir", "logging"), "logging.output_dir")
 
@@ -280,7 +365,22 @@ def load_config(path: str) -> AppConfig:
                 "mongodb.database",
             ),
         ),
-        sampling=SamplingConfig(percentage=percentage, count=count, seed=seed),
+        sampling=SamplingConfig(
+            percentage=percentage,
+            count=count,
+            seed=seed,
+            mode=mode,
+            deterministic_scan_log_every=deterministic_scan_log_every,
+            deterministic_max_scan_keys=deterministic_max_scan_keys,
+            source_lookup_concurrency=source_lookup_concurrency,
+            compare_concurrency=compare_concurrency,
+            compare_log_every=compare_log_every,
+            bucket_field=bucket_field,
+            bucket_modulus=bucket_modulus,
+            bucket_count=bucket_count,
+            cosmos_retry_max_attempts=cosmos_retry_max_attempts,
+            cosmos_retry_base_delay_ms=cosmos_retry_base_delay_ms,
+        ),
         logging=LoggingConfig(main_log=main_log, output_dir=output_dir),
         collections=collections,
         collection_defaults=collection_defaults,

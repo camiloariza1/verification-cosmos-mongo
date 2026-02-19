@@ -76,6 +76,9 @@ Start from `config.example.yaml` and set connection details and per-collection s
 - `collection_defaults` (optional): default per-collection settings used when a collection is missing from `collections` (useful with `--all-collections`)
 - `sampling.percentage` or `sampling.count`
 - `sampling.seed` (optional): makes sampling deterministic
+- `sampling.mode` (optional): `auto` (default), `deterministic`, `fast`, or `bucket`
+- `sampling.source_lookup_concurrency` / `sampling.compare_concurrency` (optional): parallelism knobs
+- `sampling.bucket_field` + `sampling.bucket_modulus` (optional): precomputed bucket sampling for very large collections
 
 Notes on choosing `business_key`:
 - It must exist in both Cosmos and MongoDB for the collection, and be unique/stable.
@@ -173,6 +176,41 @@ python -m pytest
 
 - **Deterministic sampling:** when `sampling.seed` is set (or when Cosmos SQL forces it), the tool selects the `K` documents with the smallest `sha256(seed:key)` scores. This is deterministic and order-independent, but requires scanning business keys in the source collection.
 - **Exclusions:** `exclude_fields` supports simple names (excluded at any depth) and dotted paths (excluded only at that path).
+
+## Large Collections Tuning
+
+For multi-million-document containers, prefer `sampling.mode: fast` to avoid full key scans.
+
+Recommended starting point:
+
+```yaml
+sampling:
+  mode: fast
+  count: 2000
+  source_lookup_concurrency: 8
+  compare_concurrency: 8
+  compare_log_every: 1000
+  cosmos_retry_max_attempts: 6
+  cosmos_retry_base_delay_ms: 500
+```
+
+If you need deterministic samples without scanning the full collection each run, add a precomputed indexed bucket field at write-time (for example `sampleBucket` in `[0, 1023]`) and configure:
+
+```yaml
+sampling:
+  mode: bucket
+  count: 2000
+  seed: 42
+  bucket_field: sampleBucket
+  bucket_modulus: 1024
+  bucket_count: 8
+```
+
+The tool also logs:
+- Deterministic key scan progress with docs/sec and ETA
+- Source fetch progress
+- Compare progress
+- Per-collection phase timings (count/sample/compare/total)
 
 ## Troubleshooting
 

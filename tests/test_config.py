@@ -118,3 +118,67 @@ logging:
         )
         cfg = load_config(path)
         self.assertEqual(cfg.mongodb.uri, "mongodb://mongo-env")
+
+    def test_parses_sampling_performance_controls(self) -> None:
+        path = self._write_tmp(
+            """
+cosmos:
+  api: sql
+  database: db1
+  endpoint: "https://example.documents.azure.com:443/"
+  key: "k"
+mongodb:
+  uri: "mongodb://localhost:27017"
+  database: db2
+sampling:
+  count: 500
+  mode: bucket
+  seed: 42
+  deterministic_scan_log_every: 5000
+  deterministic_max_scan_keys: 250000
+  source_lookup_concurrency: 12
+  compare_concurrency: 16
+  compare_log_every: 2000
+  bucket_field: sampleBucket
+  bucket_modulus: 1024
+  bucket_count: 12
+  cosmos_retry_max_attempts: 9
+  cosmos_retry_base_delay_ms: 750
+logging:
+  main_log: "compare_summary.log"
+  output_dir: "mismatch_logs"
+""".lstrip()
+        )
+        cfg = load_config(path)
+        self.assertEqual(cfg.sampling.mode, "bucket")
+        self.assertEqual(cfg.sampling.deterministic_scan_log_every, 5000)
+        self.assertEqual(cfg.sampling.deterministic_max_scan_keys, 250000)
+        self.assertEqual(cfg.sampling.source_lookup_concurrency, 12)
+        self.assertEqual(cfg.sampling.compare_concurrency, 16)
+        self.assertEqual(cfg.sampling.compare_log_every, 2000)
+        self.assertEqual(cfg.sampling.bucket_field, "sampleBucket")
+        self.assertEqual(cfg.sampling.bucket_modulus, 1024)
+        self.assertEqual(cfg.sampling.bucket_count, 12)
+        self.assertEqual(cfg.sampling.cosmos_retry_max_attempts, 9)
+        self.assertEqual(cfg.sampling.cosmos_retry_base_delay_ms, 750)
+
+    def test_rejects_bucket_mode_without_required_fields(self) -> None:
+        path = self._write_tmp(
+            """
+cosmos:
+  api: mongo
+  database: db1
+  uri: "mongodb://example"
+mongodb:
+  uri: "mongodb://localhost:27017"
+  database: db2
+sampling:
+  count: 100
+  mode: bucket
+logging:
+  main_log: "compare_summary.log"
+  output_dir: "mismatch_logs"
+""".lstrip()
+        )
+        with self.assertRaises(ConfigError):
+            load_config(path)

@@ -45,6 +45,15 @@ def main(argv: Optional[list[str]] = None) -> int:
         cfg.logging.main_log,
         cfg.logging.output_dir,
     )
+    logger.info(
+        "Sampling config mode=%s percentage=%s count=%s seed=%s source_lookup_concurrency=%s compare_concurrency=%s",
+        cfg.sampling.mode,
+        cfg.sampling.percentage,
+        cfg.sampling.count,
+        cfg.sampling.seed,
+        cfg.sampling.source_lookup_concurrency,
+        cfg.sampling.compare_concurrency,
+    )
 
     try:
         run_compare(

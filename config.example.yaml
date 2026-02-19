@@ -43,11 +43,33 @@ collection_defaults:
     - _ts
 
 sampling:
+  # auto | deterministic | fast | bucket
+  # - auto: if seed is set -> deterministic, else source-side fast sampling
+  # - deterministic: stable hashed-key selection (scans keys)
+  # - fast: source-side quick sample (best for very large collections)
+  # - bucket: use precomputed indexed bucket field (requires bucket_field + bucket_modulus)
+  mode: auto
   # Provide exactly one of:
   percentage: 5
   # count: 500
-  # Optional: if provided, sampling becomes deterministic (same docs every run for the same dataset)
+  # Optional: if provided, deterministic sampling is stable across runs
   seed: 42
+
+  # Progress/throughput controls
+  deterministic_scan_log_every: 10000
+  # deterministic_max_scan_keys: 200000
+  source_lookup_concurrency: 8
+  compare_concurrency: 8
+  compare_log_every: 1000
+
+  # Optional precomputed bucket sampling (long-term performance path for huge collections)
+  # bucket_field: sampleBucket
+  # bucket_modulus: 1024
+  # bucket_count: 8
+
+  # Cosmos SQL 429 throttling retry controls
+  cosmos_retry_max_attempts: 6
+  cosmos_retry_base_delay_ms: 500
 
 logging:
   main_log: "compare_summary.log"

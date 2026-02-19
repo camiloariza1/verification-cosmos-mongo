@@ -327,6 +327,8 @@ On large containers, this can take a while and look like a hang.
 To reduce scan time while troubleshooting:
 - Use a small `sampling.count` (for example `10`).
 - Keep `--collection <name>` so only one collection runs.
+- Set `sampling.mode: fast` to avoid deterministic full-key scans.
+- Increase `sampling.source_lookup_concurrency` / `sampling.compare_concurrency` for faster lookups.
 
 ## Corporate TLS inspection (CA bundle)
 

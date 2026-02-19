@@ -50,6 +50,29 @@ class CosmosMongoSourceClient(SourceClient):
         pipeline = [{"$sample": {"size": int(sample_size)}}]
         return list(self._db[collection].aggregate(pipeline))
 
+    def sample_documents_by_buckets(
+        self,
+        *,
+        collection: str,
+        bucket_field: str,
+        bucket_values: list[int],
+        sample_size: int,
+    ) -> list[dict]:
+        if not bucket_values or sample_size <= 0:
+            return []
+        self._logger.info(
+            "Running Cosmos Mongo bucket sample collection=%s bucket_field=%s buckets=%s sample_size=%s",
+            collection,
+            bucket_field,
+            bucket_values,
+            sample_size,
+        )
+        pipeline = [
+            {"$match": {bucket_field: {"$in": bucket_values}}},
+            {"$sample": {"size": int(sample_size)}},
+        ]
+        return list(self._db[collection].aggregate(pipeline))
+
     def iter_business_keys(self, *, collection: str, business_key: str) -> Iterable[Any]:
         projection = {business_key: 1}
         if business_key != "_id":

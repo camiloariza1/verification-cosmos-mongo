@@ -26,5 +26,15 @@ class SourceClient(ABC):
     def find_by_business_key(self, *, collection: str, business_key: str, key_value: Any) -> Optional[dict]:
         raise NotImplementedError
 
+    def sample_documents_by_buckets(
+        self,
+        *,
+        collection: str,
+        bucket_field: str,
+        bucket_values: list[int],
+        sample_size: int,
+    ) -> list[dict]:
+        return []
+
     def close(self) -> None:
         return None
