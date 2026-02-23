@@ -30,7 +30,12 @@ class CompareDocumentsTests(unittest.TestCase):
         diffs = compare_documents(a, b, array_order_insensitive_paths=["tags"])
         self.assertEqual(diffs, [])
 
+    def test_ignore_type_mismatch(self):
+        a = {"a": 1}
+        b = {"a": "1"}
+        diffs = compare_documents(a, b, ignore_type_mismatch=True)
+        self.assertEqual(diffs, [])
+
 
 if __name__ == "__main__":
     unittest.main()
-

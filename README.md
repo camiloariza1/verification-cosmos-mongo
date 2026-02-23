@@ -73,6 +73,7 @@ Start from `config.example.yaml` and set connection details and per-collection s
 - `collections.<name>.business_key`: unique identifier used to find the same document in both systems
 - `collections.<name>.enabled` (optional): set `false` to skip a collection while iterating on config (if `true`, `business_key` is required)
 - `collections.<name>.exclude_fields`: fields to ignore (supports simple names and dotted paths)
+- `collections.<name>.ignore_type_mismatch` (optional): if `true`, skip `type_mismatch` diffs for that collection
 - `collection_defaults` (optional): default per-collection settings used when a collection is missing from `collections` (useful with `--all-collections`)
 - `sampling.percentage` or `sampling.count`
 - `sampling.seed` (optional): makes sampling deterministic

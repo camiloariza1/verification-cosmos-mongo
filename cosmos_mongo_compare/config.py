@@ -55,6 +55,7 @@ class CollectionConfig:
     enabled: bool = True
     exclude_fields: tuple[str, ...] = ()
     array_order_insensitive_paths: tuple[str, ...] = ()
+    ignore_type_mismatch: bool = False
 
 
 @dataclass(frozen=True)
@@ -310,11 +311,15 @@ def load_config(path: str) -> AppConfig:
         defaults_raw.get("array_order_insensitive_paths"),
         "collection_defaults.array_order_insensitive_paths",
     )
+    defaults_ignore_type_mismatch = defaults_raw.get("ignore_type_mismatch", False)
+    if not isinstance(defaults_ignore_type_mismatch, bool):
+        raise ConfigError("Expected boolean at collection_defaults.ignore_type_mismatch")
     collection_defaults = CollectionConfig(
         business_key=defaults_business_key,
         enabled=defaults_enabled,
         exclude_fields=defaults_exclude_fields,
         array_order_insensitive_paths=defaults_array_paths,
+        ignore_type_mismatch=defaults_ignore_type_mismatch,
     )
 
     collections: dict[str, CollectionConfig] = {}
@@ -343,11 +348,15 @@ def load_config(path: str) -> AppConfig:
             c_raw.get("array_order_insensitive_paths"),
             f"collections.{name}.array_order_insensitive_paths",
         )
+        ignore_type_mismatch = c_raw.get("ignore_type_mismatch", collection_defaults.ignore_type_mismatch)
+        if not isinstance(ignore_type_mismatch, bool):
+            raise ConfigError(f"Expected boolean at collections.{name}.ignore_type_mismatch")
         collections[name] = CollectionConfig(
             business_key=business_key,
             enabled=enabled,
             exclude_fields=exclude_fields,
             array_order_insensitive_paths=array_paths,
+            ignore_type_mismatch=ignore_type_mismatch,
         )
 
     return AppConfig(

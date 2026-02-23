@@ -68,9 +68,6 @@ class CosmosSqlSourceClient(SourceClient):
         cosmos_kwargs: dict[str, Any] = {}
         if ca_file and os.path.isfile(ca_file):
             cosmos_kwargs["connection_verify"] = ca_file
-            self._logger.info("Using CA bundle for Cosmos SQL source client: %s", ca_file)
-        else:
-            self._logger.info("No custom CA bundle found for Cosmos SQL source client")
         self._client = CosmosClient(endpoint, credential=key, **cosmos_kwargs)
         self._database = self._client.get_database_client(database)
         self._logger.info("Cosmos SQL source client created for host=%s database=%s", self._host, database)

@@ -88,10 +88,9 @@ def build_mongo_client(
     database = parsed.get("database") or "<default>"
     option_keys = {k.lower() for k in (parsed.get("options") or {}).keys()}
     log.info(
-        "Building MongoClient for hosts=%s database=%s force_tls12_env=%s",
+        "Building MongoClient for hosts=%s database=%s",
         hosts if hosts else ["<unknown-host>"],
         database,
-        force_tls12_env or "<none>",
     )
 
     # Optional env-configurable timeouts (ms).
@@ -117,8 +116,6 @@ def build_mongo_client(
     # 1. Load Windows system certs (corporate CAs from certlm.msc)
     # 2. Optionally force TLS 1.2
     force_tls12 = _env_truthy(force_tls12_env) if force_tls12_env else False
-    if force_tls12:
-        log.info("Forcing TLS 1.2 for MongoClient based on env var %s", force_tls12_env)
 
     global _PATCHED
 
@@ -137,12 +134,10 @@ def build_mongo_client(
     # Ensure TLS is enabled if the URI doesn't specify it.
     if "tls" not in option_keys and "ssl" not in option_keys:
         kwargs["tls"] = True
-        log.info("Enabling TLS for MongoClient because URI does not specify tls/ssl")
 
     client = MongoClient(uri, **kwargs)
     log.info(
-        "MongoClient created for hosts=%s with kwarg keys=%s",
+        "MongoClient created for hosts=%s",
         hosts if hosts else ["<unknown-host>"],
-        sorted(kwargs.keys()),
     )
     return client

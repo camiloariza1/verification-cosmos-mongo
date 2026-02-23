@@ -102,6 +102,7 @@ def run_compare(
                     tgt_doc,
                     exclude_fields=c_cfg.exclude_fields,
                     array_order_insensitive_paths=c_cfg.array_order_insensitive_paths,
+                    ignore_type_mismatch=c_cfg.ignore_type_mismatch,
                 )
                 if diffs:
                     return ("mismatch", key_value, src_doc, tgt_doc, diffs)

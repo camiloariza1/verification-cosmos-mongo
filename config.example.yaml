@@ -20,6 +20,8 @@ collections:
       - _etag
       - _ts
       - lastUpdated
+    # Optional: ignore type mismatches for this collection
+    # ignore_type_mismatch: true
     # Optional: treat arrays at these paths as order-insensitive
     # array_order_insensitive_paths:
     #   - "addresses"
@@ -41,6 +43,8 @@ collection_defaults:
   exclude_fields:
     - _etag
     - _ts
+  # Optional: apply to collections without explicit override
+  # ignore_type_mismatch: false
 
 sampling:
   # auto | deterministic | fast | bucket
